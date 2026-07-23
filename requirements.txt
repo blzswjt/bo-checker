@@ -5,9 +5,3 @@ python-dotenv
 openpyxl
 pandas
 python-multipart
-fastapi
-uvicorn
-openai
-python-dotenv
-openpyxl
-pandas

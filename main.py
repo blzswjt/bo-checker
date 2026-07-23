@@ -93,6 +93,18 @@ async def get_rules():
 
 if __name__ == "__main__":
     import uvicorn
+    import sys
+
+    # 启动诊断
+    print("=" * 50)
+    print(f"Python: {sys.version}")
+    print(f"工作目录: {os.getcwd()}")
+    print(f"PORT 环境变量: {os.getenv('PORT', '未设置')}")
+    print(f"LLM_API_KEY: {'已配置' if os.getenv('LLM_API_KEY') else '未配置'}")
+    print(f"LLM_BASE_URL: {os.getenv('LLM_BASE_URL', '未设置')}")
+    print(f"文件列表: {os.listdir('.')}")
+    print("=" * 50)
+
     port = int(os.getenv("PORT", 8005))
-    print(f"启动服务: http://localhost:{port}")
+    print(f"启动服务: http://0.0.0.0:{port}")
     uvicorn.run("main:app", host="0.0.0.0", port=port)
