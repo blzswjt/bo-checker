@@ -2,6 +2,7 @@
 数据建模识别规范 - 所有元素类型的规则知识库
 包含：主题域分类、主题域分组、主题域、业务对象、逻辑实体、业务属性
 """
+import json
 
 # 所有支持的元素类型
 ELEMENT_TYPES = [
@@ -176,28 +177,65 @@ def build_check_prompt(element_type: str) -> str:
     return "\n".join(parts)
 
 
-def build_batch_prompt(element_type: str, items_text: str) -> str:
-    """构建批量识别 Prompt"""
+def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = None) -> str:
+    """构建批量识别 Prompt，集成知识库示例和逐条规则分析"""
     rules = ELEMENT_RULES.get(element_type)
     if not rules:
         return ""
 
-    # 简要规则摘要
-    id_summary = "、".join(r["rule"] for r in rules["identification"][:5])
+    # 规则详情
+    id_rules = rules["identification"]
+    id_detail = ""
+    for i, r in enumerate(id_rules, 1):
+        id_detail += f"\n{i}. 【{r['rule']}】{r['desc']}"
+        if r.get("positive"):
+            id_detail += f"（正例：{r['positive']}）"
+        if r.get("negative"):
+            id_detail += f"（反例：{r['negative']}）"
+
     not_summary = ""
     if rules.get("not_examples"):
         not_summary = "\n常见不是的情况：" + "；".join(rules["not_examples"][:4])
 
+    # 知识库已知示例
+    kb_section = ""
+    if kb_examples:
+        pos = kb_examples.get("positive", [])
+        neg = kb_examples.get("negative", [])
+        if pos or neg:
+            kb_section = "\n\n## 已知参考（用户已确认，请优先参考）"
+            if pos:
+                kb_section += "\n已确认是的：" + "、".join(f"{e['item']}（{e.get('reason','')}）" for e in pos[:6])
+            if neg:
+                kb_section += "\n已确认不是的：" + "、".join(f"{e['item']}（{e.get('reason','')}）" for e in neg[:6])
+
+    # 构建规则名称列表供逐条分析
+    rule_names = [r["rule"] for r in id_rules]
+    rule_names_json = json.dumps(rule_names, ensure_ascii=False)
+
     return f"""你是一个数据治理专家。请判断以下事物是否是「{element_type}」。
 
-{element_type}定义：{rules['description']}
-识别要点：{id_summary}{not_summary}
+## {element_type}定义
+{rules['description']}
 
-请对每个事物给出JSON格式结果：
-{{"results": [{{"item": "事物名", "is_bo": true/false/null, "confidence": "high/medium/low", "reason": "简要理由"}}]}}
+## 识别规则（需全部满足）{id_detail}{not_summary}{kb_section}
 
-其中 is_bo: true=是{element_type}, false=不是, null=无法确定需人工判断。
-confidence: high=高置信度, medium=中等, low=低（需人工复核）。
+## 输出要求
+对每个事物逐条规则分析，输出JSON：
+{{"results": [{{
+  "item": "事物名",
+  "is_bo": true/false/null,
+  "confidence": "high/medium/low",
+  "reason": "总体简要理由",
+  "rules_check": [{{"rule": "规则名", "pass": true/false, "reason": "满足或不满足的简要原因"}}]
+}}]}}
+
+说明：
+- is_bo: true=是{element_type}, false=不是, null=无法确定需人工判断
+- confidence: high/medium/low
+- rules_check: 对每条识别规则逐一判断，rule名必须与上面的规则名完全一致
+
+规则名列表：{rule_names_json}
 
 待判断的事物列表：
 {items_text}"""
@@ -220,3 +258,24 @@ def get_all_rules_text() -> dict:
                 parts.append(f"- {ex}")
         result[etype] = "\n".join(parts)
     return result
+
+
+# 列名关键词 → 元素类型推荐映射
+COLUMN_TYPE_KEYWORDS = {
+    "主题域分类": ["主题域分类", "分类名称", "L1"],
+    "主题域分组": ["主题域分组", "分组名称", "L2"],
+    "主题域": ["主题域名称", "主题域", "L3"],
+    "业务对象": ["业务对象唯一标识", "业务对象名称", "业务对象编码", "业务对象"],
+    "逻辑实体": ["逻辑实体名称", "逻辑实体唯一标识", "逻辑实体编码", "逻辑实体"],
+    "业务属性": ["属性名称", "属性唯一标识", "属性编码", "业务属性", "业务属性名称"],
+}
+
+
+def recommend_element_type(column_name: str) -> str | None:
+    """根据列名推荐最可能的元素类型"""
+    col = column_name.strip()
+    for etype, keywords in COLUMN_TYPE_KEYWORDS.items():
+        for kw in keywords:
+            if kw in col:
+                return etype
+    return None

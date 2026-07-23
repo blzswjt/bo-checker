@@ -16,8 +16,9 @@ from typing import Optional
 from llm import chat_stream
 from rules import ELEMENT_TYPES, get_all_rules_text
 from checker import parse_excel_file, extract_column_values, check_items_stream, check_single_item
+import kb
 
-app = FastAPI(title="数据建模识别智能体", version="3.0.0")
+app = FastAPI(title="数据建模识别智能体", version="4.0.0")
 
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
@@ -116,6 +117,59 @@ async def get_column_values(file_path: str, sheet: str, column: str):
 @app.get("/api/rules")
 async def get_rules():
     return {"rules": get_all_rules_text()}
+
+
+# ============================================================
+# 知识库管理
+# ============================================================
+
+class CorrectionRequest(BaseModel):
+    item: str
+    element_type: str
+    original_result: Optional[bool] = None
+    corrected_result: bool
+    reason: str = ""
+
+
+@app.post("/api/correct")
+async def submit_correction(req: CorrectionRequest):
+    """提交纠正并加入知识库"""
+    kb.add_correction(req.item, req.element_type, req.original_result, req.corrected_result, req.reason)
+    return {"ok": True}
+
+
+class ExampleRequest(BaseModel):
+    element_type: str
+    item: str
+    is_match: bool
+    reason: str = ""
+
+
+@app.post("/api/kb/add-example")
+async def add_kb_example(req: ExampleRequest):
+    """添加知识库示例"""
+    kb.add_example(req.element_type, req.item, req.is_match, req.reason)
+    return {"ok": True}
+
+
+@app.delete("/api/kb/remove-example")
+async def remove_kb_example(element_type: str, item: str):
+    """删除知识库示例"""
+    kb.remove_example(element_type, item)
+    return {"ok": True}
+
+
+@app.get("/api/kb")
+async def get_knowledge_base():
+    """获取完整知识库"""
+    return kb.get_all()
+
+
+@app.put("/api/kb")
+async def update_knowledge_base(data: dict):
+    """整体更新知识库"""
+    kb.update_all(data)
+    return {"ok": True}
 
 
 if __name__ == "__main__":

@@ -10,7 +10,8 @@ import re
 import pandas as pd
 from pathlib import Path
 from llm import chat
-from rules import build_batch_prompt, build_check_prompt, ELEMENT_TYPES
+from rules import build_batch_prompt, build_check_prompt, ELEMENT_TYPES, recommend_element_type
+import kb
 
 
 def find_target_column(df: pd.DataFrame) -> tuple[str, list[str]]:
@@ -113,6 +114,7 @@ def parse_excel_file(file_path: str) -> dict:
                 "rows": len(series),
                 "sample": sample,
                 "unique_count": len(set(values)),
+                "recommended_type": recommend_element_type(col_str),
             })
 
         sheets.append({
@@ -169,14 +171,13 @@ def extract_column_values(file_path: str, sheet_name: str, column_name: str) -> 
 def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5):
     """
     生成器：逐批调用LLM判断，yield SSE事件。
-    事件格式：
-      {"type":"start", "total":N, "element_type":"..."}
-      {"type":"progress", "current":5, "total":N, "batch_start":0, "batch_end":5}
-      {"type":"result", "index":0, "item":"...", "is_bo":true, "confidence":"high", "reason":"..."}
-      {"type":"done", "summary":{"is_bo":3, "not_bo":1, "unknown":1}}
+    集成知识库示例，结果包含逐条规则分析(rules_check)。
     """
     total = len(items)
     yield {"type": "start", "total": total, "element_type": element_type}
+
+    # 获取知识库示例
+    kb_examples = kb.get_examples(element_type)
 
     all_results = []
 
@@ -184,17 +185,17 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
         batch = items[i:i + batch_size]
         numbered = "\n".join(f"{j+1}. {item}" for j, item in enumerate(batch))
 
-        prompt = build_batch_prompt(element_type, numbered)
+        prompt = build_batch_prompt(element_type, numbered, kb_examples=kb_examples)
         if not prompt:
             for j, item in enumerate(batch):
-                result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"未知元素类型: {element_type}"}
+                result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"未知元素类型: {element_type}", "rules_check": []}
                 all_results.append(result)
-                yield {"type": "result", "index": i + j, "item": item, "is_bo": None, "confidence": "low", "reason": result["reason"]}
+                yield {"type": "result", "index": i + j, **result}
             yield {"type": "progress", "current": min(i + len(batch), total), "total": total}
             continue
 
         messages = [
-            {"role": "system", "content": "你是数据治理专家，严格按JSON格式输出结果。"},
+            {"role": "system", "content": "你是数据治理专家，严格按JSON格式输出结果，必须包含rules_check逐条规则分析。"},
             {"role": "user", "content": prompt}
         ]
 
@@ -211,12 +212,13 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                     "is_bo": result.get("is_bo"),
                     "confidence": result.get("confidence", "low"),
                     "reason": result.get("reason", ""),
+                    "rules_check": result.get("rules_check", []),
                 }
         except Exception as e:
             for j, item in enumerate(batch):
-                result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"AI分析出错: {str(e)}"}
+                result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"AI分析出错: {str(e)}", "rules_check": []}
                 all_results.append(result)
-                yield {"type": "result", "index": i + j, "item": item, "is_bo": None, "confidence": "low", "reason": result["reason"]}
+                yield {"type": "result", "index": i + j, **result}
 
         yield {"type": "progress", "current": min(i + len(batch), total), "total": total}
 

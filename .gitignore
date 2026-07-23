@@ -5,3 +5,4 @@ uploads/
 *.db
 node_modules/
 test_data.xlsx
+knowledge.json
