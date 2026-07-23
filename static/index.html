@@ -410,9 +410,12 @@ function renderResults(data) {
 
   // 列信息
   const colInfo = document.getElementById('colInfo');
-  colInfo.innerHTML = `🎯 自动识别目标列：<span class="col-name">${data.target_column}</span>
-    &nbsp;|&nbsp; 共 ${data.total_rows} 行，${data.unique_items} 个不重复项
-    &nbsp;|&nbsp; 表格共 ${data.all_columns.length} 列`;
+  const sheetInfo = data.target_sheet ? `子表：<span class="col-name">${data.target_sheet}</span> &nbsp;|&nbsp; ` : '';
+  const matchedKw = data.matched_keyword ? `匹配关键词：「${data.matched_keyword}」 &nbsp;|&nbsp; ` : '';
+  const totalSheets = data.total_sheets ? `共 ${data.total_sheets} 个子表` : '';
+  colInfo.innerHTML = `🎯 ${sheetInfo}目标列：<span class="col-name">${data.target_column}</span>
+    &nbsp;|&nbsp; ${matchedKw}${totalSheets}
+    &nbsp;|&nbsp; ${data.total_rows} 行，${data.unique_items} 个不重复项`;
 
   // 统计卡片
   const s = data.summary;

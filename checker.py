@@ -17,8 +17,12 @@ def find_target_column(df: pd.DataFrame) -> tuple[str, list[str]]:
     2. 否则找非数值、非日期、文本内容较短且有意义的那一列
     返回 (列名, 该列所有非空值列表)
     """
-    # 关键词优先匹配
-    keywords = ["业务对象", "对象名称", "对象名", "名称", "实体", "单据", "事物"]
+    # 关键词优先匹配（按优先级排序，越靠前优先级越高）
+    keywords = [
+        "业务对象唯一标识", "业务对象名称", "业务对象编码",
+        "对象名称", "对象名", "唯一标识",
+        "业务对象", "名称", "实体", "单据", "事物"
+    ]
     for col in df.columns:
         col_str = str(col).strip()
         for kw in keywords:
@@ -161,40 +165,85 @@ def check_single_item(item: str) -> dict:
 
 def process_excel(file_path: str) -> dict:
     """
-    处理上传的 Excel 文件，返回完整分析结果。
+    处理上传的 Excel 文件（支持多 Sheet），跨所有子表自动找到目标列并逐行识别。
     """
     path = Path(file_path)
     if not path.exists():
         return {"error": "文件不存在"}
 
-    # 读取 Excel
+    # 读取 Excel 所有 Sheet
     try:
-        df = pd.read_excel(file_path)
+        all_sheets = pd.read_excel(file_path, sheet_name=None)  # 返回 {sheet_name: DataFrame}
     except Exception as e:
         return {"error": f"读取Excel失败: {str(e)}"}
 
-    if df.empty:
-        return {"error": "表格为空"}
+    if not all_sheets:
+        return {"error": "Excel文件为空"}
 
-    # 获取所有列信息
-    columns_info = []
-    for col in df.columns:
-        series = df[col].dropna()
-        sample = series.head(5).astype(str).tolist()
-        columns_info.append({
-            "name": str(col),
-            "count": len(series),
-            "samples": sample
+    # ---- 跨所有 Sheet 搜索目标列 ----
+    # 关键词优先级排序（越靠前越优先）
+    search_keywords = [
+        "业务对象唯一标识", "业务对象名称", "业务对象编码",
+        "唯一标识", "对象名称", "对象名",
+        "业务对象", "名称", "实体", "单据", "事物"
+    ]
+
+    best_sheet = None
+    best_col = None
+    best_values = []
+    best_keyword = None
+
+    # 遍历所有 Sheet，找到最匹配的目标列
+    sheets_info = []
+    for sheet_name, df in all_sheets.items():
+        if df.empty:
+            continue
+        col_names = [str(c).strip() for c in df.columns]
+        sheets_info.append({
+            "sheet": sheet_name,
+            "columns": col_names,
+            "rows": len(df)
         })
 
-    # 自动找目标列
-    target_col, values = find_target_column(df)
+        for kw in search_keywords:
+            for col in df.columns:
+                col_str = str(col).strip()
+                if kw in col_str:
+                    values = df[col].dropna().astype(str).str.strip().tolist()
+                    values = [v for v in values if v and v != "nan" and len(v) > 1]
+                    if values and len(values) > len(best_values):
+                        best_sheet = sheet_name
+                        best_col = col_str
+                        best_values = values
+                        best_keyword = kw
+                    break  # 同一列命中后不重复
+            if best_values:
+                break  # 高优先级关键词已命中，不再搜索低优先级
+        # 如果已经在某个 Sheet 找到了高优先级匹配，跳过其他 Sheet 的低优先级搜索
+        if best_keyword and best_keyword in ["业务对象唯一标识", "业务对象名称", "业务对象编码"]:
+            break
 
-    if not values:
-        return {"error": f"列「{target_col}」中没有找到有效数据"}
+    # 如果关键词搜索没找到，用启发式在所有 Sheet 中找
+    if not best_values:
+        for sheet_name, df in all_sheets.items():
+            if df.empty:
+                continue
+            col, values = find_target_column(df)
+            if len(values) > len(best_values):
+                best_sheet = sheet_name
+                best_col = col
+                best_values = values
+
+    if not best_values:
+        return {"error": "所有子表中均未找到有效的目标列数据"}
 
     # 去重
-    unique_values = list(dict.fromkeys(values))  # 保持顺序去重
+    unique_values = list(dict.fromkeys(best_values))
+
+    # 收集所有 Sheet 的列信息供前端展示
+    all_columns_info = []
+    for si in sheets_info:
+        all_columns_info.append(si)
 
     # 批量检测
     results = check_items_batch(unique_values)
@@ -205,10 +254,13 @@ def process_excel(file_path: str) -> dict:
     unknown_count = sum(1 for r in results if r.get("is_bo") is None)
 
     return {
-        "total_rows": len(values),
+        "total_rows": len(best_values),
         "unique_items": len(unique_values),
-        "target_column": target_col,
-        "all_columns": columns_info,
+        "target_column": best_col,
+        "target_sheet": best_sheet,
+        "matched_keyword": best_keyword,
+        "total_sheets": len(all_sheets),
+        "sheets_info": all_columns_info,
         "results": results,
         "summary": {
             "is_bo": bo_count,
