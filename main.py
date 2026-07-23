@@ -1,20 +1,22 @@
 """
-FastAPI 主入口 - 业务对象识别智能体
+FastAPI 主入口 - 数据建模识别智能体
+支持：主题域分类、主题域分组、主题域、业务对象、逻辑实体、业务属性
 """
 import os
 import json
 from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from llm import chat_stream
-from rules import CHECK_PROMPT, IDENTIFICATION_RULES, NAMING_RULES
-from checker import process_excel, check_single_item, find_target_column
+from rules import ELEMENT_TYPES, get_all_rules_text
+from checker import process_excel, check_single_item
 
-app = FastAPI(title="业务对象识别智能体", version="1.0.0")
+app = FastAPI(title="数据建模识别智能体", version="2.0.0")
 
 # 静态文件
 static_dir = Path(__file__).parent / "static"
@@ -39,21 +41,37 @@ async def index():
 
 
 # ============================================================
+# 获取支持的元素类型列表
+# ============================================================
+
+@app.get("/api/element-types")
+async def get_element_types():
+    """返回所有支持的元素类型"""
+    return {"types": ELEMENT_TYPES}
+
+
+# ============================================================
 # 上传 Excel 批量识别
 # ============================================================
 
 @app.post("/api/check-excel")
-async def check_excel(file: UploadFile = File(...)):
+async def check_excel(
+    file: UploadFile = File(...),
+    element_type: str = Form(default="业务对象")
+):
     """上传 Excel 文件，自动找到目标列并逐行识别"""
     if not file.filename.endswith((".xlsx", ".xls")):
         return JSONResponse({"error": "请上传 .xlsx 或 .xls 格式文件"}, status_code=400)
+
+    if element_type not in ELEMENT_TYPES:
+        return JSONResponse({"error": f"不支持的元素类型: {element_type}，可选: {ELEMENT_TYPES}"}, status_code=400)
 
     save_path = UPLOAD_DIR / file.filename
     with open(save_path, "wb") as f:
         content = await file.read()
         f.write(content)
 
-    result = process_excel(str(save_path))
+    result = process_excel(str(save_path), element_type=element_type)
     return result
 
 
@@ -63,12 +81,16 @@ async def check_excel(file: UploadFile = File(...)):
 
 class SingleCheckRequest(BaseModel):
     item: str
+    element_type: str = "业务对象"
 
 
 @app.post("/api/check-single")
 async def check_single(req: SingleCheckRequest):
-    """流式判断单个事物是否为业务对象"""
-    messages = check_single_item(req.item)
+    """流式判断单个事物是否为指定元素类型"""
+    if req.element_type not in ELEMENT_TYPES:
+        return JSONResponse({"error": f"不支持的元素类型: {req.element_type}"}, status_code=400)
+
+    messages = check_single_item(req.item, element_type=req.element_type)
 
     def generate():
         for chunk in chat_stream(messages, temperature=0.2):
@@ -84,11 +106,8 @@ async def check_single(req: SingleCheckRequest):
 
 @app.get("/api/rules")
 async def get_rules():
-    """返回业务对象识别规则和命名规则"""
-    return {
-        "identification_rules": IDENTIFICATION_RULES,
-        "naming_rules": NAMING_RULES
-    }
+    """返回所有元素类型的识别规则和命名规则"""
+    return {"rules": get_all_rules_text()}
 
 
 if __name__ == "__main__":

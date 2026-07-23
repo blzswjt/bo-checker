@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>业务对象识别智能体</title>
+<title>数据建模识别智能体</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -64,6 +64,27 @@ body {
   margin-bottom: 16px;
   color: #1a1a1a;
 }
+
+/* 元素类型选择器 */
+.type-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.type-btn {
+  padding: 6px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 20px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  transition: all 0.2s;
+}
+.type-btn:hover { border-color: #1a73e8; color: #1a73e8; }
+.type-btn.active { border-color: #1a73e8; background: #e8f0fe; color: #1a73e8; }
 
 /* 上传区 */
 .upload-zone {
@@ -250,13 +271,33 @@ body {
   border: 1px solid #e5e5e5;
   border-radius: 8px;
 }
+
+/* 规则Tab */
+.rules-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.rules-tab {
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  background: #f5f5f5;
+  color: #666;
+  border: none;
+  transition: all 0.2s;
+}
+.rules-tab.active { background: #1a73e8; color: #fff; }
+.rules-tab:hover:not(.active) { background: #e8e8e8; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>🔍 业务对象识别智能体</h1>
-  <p>基于数据治理规则，自动识别业务对象 — 支持 Excel 批量识别和单个分析</p>
+  <h1>🔍 数据建模识别智能体</h1>
+  <p>基于数据治理规则，自动识别各类元素 — 支持主题域、业务对象、逻辑实体、业务属性等</p>
 </div>
 
 <div class="container">
@@ -269,11 +310,15 @@ body {
   <!-- 批量识别面板 -->
   <div class="panel active" id="panel-batch">
     <div class="card">
+      <h2>选择元素类型</h2>
+      <div class="type-selector" id="batchTypeSelector"></div>
+    </div>
+    <div class="card">
       <h2>上传 Excel 文件</h2>
       <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <div class="icon">📁</div>
         <div>点击或拖拽上传 <b>.xlsx</b> 文件</div>
-        <p>系统会自动识别包含待检测事物的列</p>
+        <p>系统会自动在所有子表中找到目标列并按选定类型识别</p>
       </div>
       <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this)">
       <div class="progress-bar" id="progressBar">
@@ -291,7 +336,7 @@ body {
           <h2 style="margin:0">识别结果</h2>
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick="filterResults('all')">全部</button>
-            <button class="btn btn-outline btn-sm" onclick="filterResults(true)">✅ 是业务对象</button>
+            <button class="btn btn-outline btn-sm" onclick="filterResults(true)">✅ 是</button>
             <button class="btn btn-outline btn-sm" onclick="filterResults(false)">❌ 不是</button>
             <button class="btn btn-outline btn-sm" onclick="filterResults(null)">⚠️ 待人工</button>
             <button class="btn btn-primary btn-sm" onclick="exportResults()">📥 导出结果</button>
@@ -318,6 +363,10 @@ body {
   <!-- 单个分析面板 -->
   <div class="panel" id="panel-single">
     <div class="card">
+      <h2>选择元素类型</h2>
+      <div class="type-selector" id="singleTypeSelector"></div>
+    </div>
+    <div class="card">
       <h2>输入事物名称</h2>
       <div class="single-input">
         <input type="text" id="singleItem" placeholder="如：采购订单、币种、审批..." onkeydown="if(event.key==='Enter')checkSingle()">
@@ -330,24 +379,60 @@ body {
   <!-- 规则说明面板 -->
   <div class="panel" id="panel-rules">
     <div class="card">
-      <h2>📋 业务对象识别规则</h2>
-      <div class="rules-content" id="idRules"></div>
-    </div>
-    <div class="card">
-      <h2>🏷️ 业务对象命名规则</h2>
-      <div class="rules-content" id="nameRules"></div>
+      <h2>📋 各元素类型识别规则</h2>
+      <div class="rules-tabs" id="rulesTabs"></div>
+      <div class="rules-content" id="rulesContent">请选择元素类型查看规则</div>
     </div>
   </div>
 </div>
 
 <script>
 let allResults = [];
+let currentBatchType = '业务对象';
+let currentSingleType = '业务对象';
+let allRules = {};
+
+// 初始化元素类型选择器
+async function initTypeSelectors() {
+  try {
+    const res = await fetch('/api/element-types');
+    const data = await res.json();
+    const types = data.types || ['业务对象'];
+
+    const batchSelector = document.getElementById('batchTypeSelector');
+    const singleSelector = document.getElementById('singleTypeSelector');
+
+    types.forEach(t => {
+      const btn1 = document.createElement('button');
+      btn1.className = 'type-btn' + (t === '业务对象' ? ' active' : '');
+      btn1.textContent = t;
+      btn1.onclick = () => {
+        batchSelector.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+        btn1.classList.add('active');
+        currentBatchType = t;
+      };
+      batchSelector.appendChild(btn1);
+
+      const btn2 = document.createElement('button');
+      btn2.className = 'type-btn' + (t === '业务对象' ? ' active' : '');
+      btn2.textContent = t;
+      btn2.onclick = () => {
+        singleSelector.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+        btn2.classList.add('active');
+        currentSingleType = t;
+      };
+      singleSelector.appendChild(btn2);
+    });
+  } catch(e) {
+    console.error('Failed to load element types', e);
+  }
+}
 
 // Tab 切换
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelector(`.tab:nth-child(${name==='batch'?1:name==='single'?2:3})`).classList.add('active');
+  document.querySelector(`.tabs .tab:nth-child(${name==='batch'?1:name==='single'?2:3})`).classList.add('active');
   document.getElementById(`panel-${name}`).classList.add('active');
 }
 
@@ -378,10 +463,11 @@ async function handleFile(input) {
 
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('element_type', currentBatchType);
 
   try {
     document.getElementById('progressFill').style.width = '60%';
-    document.getElementById('progressText').textContent = 'AI 正在逐行分析...';
+    document.getElementById('progressText').textContent = `AI 正在逐行分析（${currentBatchType}）...`;
 
     const res = await fetch('/api/check-excel', { method: 'POST', body: formData });
     const data = await res.json();
@@ -408,25 +494,24 @@ function renderResults(data) {
   const resultArea = document.getElementById('resultArea');
   resultArea.style.display = 'block';
 
-  // 列信息
   const colInfo = document.getElementById('colInfo');
   const sheetInfo = data.target_sheet ? `子表：<span class="col-name">${data.target_sheet}</span> &nbsp;|&nbsp; ` : '';
   const matchedKw = data.matched_keyword ? `匹配关键词：「${data.matched_keyword}」 &nbsp;|&nbsp; ` : '';
   const totalSheets = data.total_sheets ? `共 ${data.total_sheets} 个子表` : '';
+  const elementType = data.element_type || currentBatchType;
   colInfo.innerHTML = `🎯 ${sheetInfo}目标列：<span class="col-name">${data.target_column}</span>
     &nbsp;|&nbsp; ${matchedKw}${totalSheets}
+    &nbsp;|&nbsp; 元素类型：<b>${elementType}</b>
     &nbsp;|&nbsp; ${data.total_rows} 行，${data.unique_items} 个不重复项`;
 
-  // 统计卡片
   const s = data.summary;
   document.getElementById('summaryCards').innerHTML = `
     <div class="stat-card stat-total"><div class="num">${data.unique_items}</div><div class="label">总计</div></div>
-    <div class="stat-card stat-bo"><div class="num">${s.is_bo}</div><div class="label">✅ 是业务对象</div></div>
+    <div class="stat-card stat-bo"><div class="num">${s.is_bo}</div><div class="label">✅ 是${elementType}</div></div>
     <div class="stat-card stat-not"><div class="num">${s.not_bo}</div><div class="label">❌ 不是</div></div>
     <div class="stat-card stat-unknown"><div class="num">${s.unknown}</div><div class="label">⚠️ 待人工判断</div></div>
   `;
 
-  // 结果表格
   renderTable(allResults);
 }
 
@@ -458,10 +543,10 @@ function filterResults(type) {
   }
 }
 
-// 导出 Excel
+// 导出 CSV
 function exportResults() {
   if (!allResults.length) return;
-  let csv = '\uFEFF序号,事物名称,是否业务对象,置信度,理由\n';
+  let csv = '\uFEFF序号,事物名称,是否匹配,置信度,理由\n';
   allResults.forEach((r, i) => {
     const isBo = r.is_bo === true ? '是' : r.is_bo === false ? '否' : '待人工判断';
     csv += `${i+1},"${r.item}",${isBo},${r.confidence},"${(r.reason||'').replace(/"/g,'""')}"\n`;
@@ -469,7 +554,7 @@ function exportResults() {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = '业务对象识别结果.csv';
+  a.download = '识别结果.csv';
   a.click();
 }
 
@@ -490,7 +575,7 @@ async function checkSingle() {
     const res = await fetch('/api/check-single', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item })
+      body: JSON.stringify({ item, element_type: currentSingleType })
     });
 
     const reader = res.body.getReader();
@@ -522,10 +607,38 @@ async function checkSingle() {
 }
 
 // 加载规则
-fetch('/api/rules').then(r => r.json()).then(data => {
-  document.getElementById('idRules').textContent = data.identification_rules;
-  document.getElementById('nameRules').textContent = data.naming_rules;
-}).catch(() => {});
+async function loadRules() {
+  try {
+    const res = await fetch('/api/rules');
+    const data = await res.json();
+    allRules = data.rules || {};
+
+    const tabsContainer = document.getElementById('rulesTabs');
+    tabsContainer.innerHTML = '';
+    let first = true;
+    for (const type of Object.keys(allRules)) {
+      const btn = document.createElement('button');
+      btn.className = 'rules-tab' + (first ? ' active' : '');
+      btn.textContent = type;
+      btn.onclick = () => {
+        tabsContainer.querySelectorAll('.rules-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('rulesContent').textContent = allRules[type];
+      };
+      tabsContainer.appendChild(btn);
+      if (first) {
+        document.getElementById('rulesContent').textContent = allRules[type];
+        first = false;
+      }
+    }
+  } catch(e) {
+    console.error('Failed to load rules', e);
+  }
+}
+
+// 初始化
+initTypeSelectors();
+loadRules();
 
 // 工具函数
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
