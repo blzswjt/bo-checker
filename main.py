@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from llm import chat_stream
-from rules import ELEMENT_TYPES, get_all_rules_text
+from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text
 from checker import parse_excel_file, extract_column_values, check_items_stream, check_single_item
 import kb
 
@@ -38,7 +38,11 @@ async def index():
 
 @app.get("/api/element-types")
 async def get_element_types():
-    return {"types": ELEMENT_TYPES}
+    # 返回元素类型列表及每种类型的识别规则名
+    rule_names = {}
+    for etype, rules in ELEMENT_RULES.items():
+        rule_names[etype] = [r["rule"] for r in rules.get("identification", [])]
+    return {"types": ELEMENT_TYPES, "rule_names": rule_names}
 
 
 @app.post("/api/parse-excel")

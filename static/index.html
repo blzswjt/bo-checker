@@ -54,9 +54,17 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .cf{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px}
 .cf-h{background:#e8f5e9;color:#2e7d32}.cf-m{background:#fff3e0;color:#e65100}.cf-l{background:#fce4ec;color:#c62828}
 .expand-btn{background:none;border:none;cursor:pointer;font-size:14px;color:#1a73e8;padding:2px 4px}
-.rules-detail{background:#f9f9f9;padding:8px;border-radius:6px;font-size:11px;line-height:1.6;margin-top:4px}
-.rules-detail .rk{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:4px}
-.rk-pass{background:#e8f5e9;color:#2e7d32}.rk-fail{background:#fce4ec;color:#c62828}
+.rules-detail{background:#f9f9f9;padding:10px 14px;border-radius:6px;font-size:12px;line-height:1.8;margin-top:4px}
+.rules-detail .ri{display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid #f0f0f0}
+.rules-detail .ri:last-child{border-bottom:none}
+.rules-detail .ri-icon{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;margin-top:1px}
+.ri-pass .ri-icon{background:#e8f5e9;color:#2e7d32}
+.ri-fail .ri-icon{background:#fce4ec;color:#c62828}
+.ri-unk .ri-icon{background:#f5f5f5;color:#999}
+.rules-detail .ri-name{font-weight:600;color:#333;min-width:100px;flex-shrink:0}
+.rules-detail .ri-reason{color:#666;font-size:11px;flex:1}
+.ri-fail .ri-name{color:#c62828}
+.ri-fail .ri-reason{color:#c62828;font-weight:500}
 .correct-row{display:flex;gap:4px;align-items:center;margin-top:4px}
 .correct-row input{flex:1;padding:3px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px}
 .kb-grid{display:grid;grid-template-columns:200px 1fr;gap:16px}
@@ -125,12 +133,12 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
   </div>
 </div>
 <script>
-let ET=[], tid=0, tasks={}, sType='业务对象', allRules={}, kbData={};
+let ET=[], RN={}, tid=0, tasks={}, sType='业务对象', allRules={}, kbData={};
 
 // ============ INIT ============
 async function init(){
   const[tr,rr]=await Promise.all([fetch('/api/element-types').then(r=>r.json()),fetch('/api/rules').then(r=>r.json())]);
-  ET=tr.types||[];sType=ET[0]||'';allRules=rr.rules||{};
+  ET=tr.types||[];RN=tr.rule_names||{};sType=ET[0]||'';allRules=rr.rules||{};
   // single type
   const sr=document.getElementById('sTypeRow');
   ET.forEach(t=>{const c=document.createElement('button');c.className='chip'+(t===sType?' on':'');c.textContent=t;c.onclick=()=>{sr.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));c.classList.add('on');sType=t};sr.appendChild(c)});
@@ -220,13 +228,7 @@ function rRunning(t){
         const ct=r.confidence==='high'?'高':r.confidence==='medium'?'中':'低';
         h+=`<tr><td><button class="expand-btn" onclick="toggleDetail(this,${t.id},${pi},${ri})">▶</button></td><td>${ri+1}</td><td><b>${esc(r.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(r.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)" title="标记为正确">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)" title="标记为错误">✗</button></td></tr>`;
         // hidden rules detail row
-        h+=`<tr class="detail-row" style="display:none"><td colspan="7"><div class="rules-detail">`;
-        if(r.rules_check&&r.rules_check.length){
-          r.rules_check.forEach(rc=>{
-            h+=`<span class="rk ${rc.pass?'rk-pass':'rk-fail'}">${rc.pass?'✓':'✗'} ${esc(rc.rule||'')}</span> ${esc(rc.reason||'')}<br>`;
-          });
-        }else{h+=`<span style="color:#999">无逐条规则分析</span>`}
-        h+=`</div></td></tr>`;
+        h+=`<tr class="detail-row" style="display:none"><td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, r.rules_check)}</div></td></tr>`;
       });
       h+=`</tbody></table></div>`;
     }
@@ -328,10 +330,7 @@ function appendResultRow(t,pi,ev){
   const tr1=document.createElement('tr');tr1.className='new';
   tr1.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this,${t.id},${pi},${ri})">▶</button></td><td>${p.results.length}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
   const tr2=document.createElement('tr');tr2.className='detail-row';tr2.style.display='none';
-  let dh='<td colspan="7"><div class="rules-detail">';
-  if(ev.rules_check&&ev.rules_check.length){ev.rules_check.forEach(rc=>{dh+=`<span class="rk ${rc.pass?'rk-pass':'rk-fail'}">${rc.pass?'✓':'✗'} ${esc(rc.rule||'')}</span> ${esc(rc.reason||'')}<br>`})}
-  else{dh+='<span style="color:#999">无逐条规则分析</span>'}
-  dh+='</div></td>';tr2.innerHTML=dh;
+  tr2.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
   tb.appendChild(tr1);tb.appendChild(tr2);
   tr1.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
@@ -430,6 +429,43 @@ async function delKB(type,item){
 // ============ UTILS ============
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function renderMd(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`(.+?)`/g,'<code>$1</code>').replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>')}
+
+// 渲染逐条规则分析详情（始终列出所有规则）
+function renderRulesDetail(elementType, rulesCheck){
+  const allRules = RN[elementType] || [];
+  // 将LLM返回的rules_check转为map
+  const rcMap = {};
+  if(rulesCheck && rulesCheck.length){
+    rulesCheck.forEach(rc => {
+      // 模糊匹配规则名
+      const key = allRules.find(r => rc.rule && (r === rc.rule || r.includes(rc.rule) || rc.rule.includes(r))) || rc.rule;
+      rcMap[key] = rc;
+    });
+  }
+  let h = '';
+  allRules.forEach(ruleName => {
+    const rc = rcMap[ruleName];
+    if(rc){
+      const cls = rc.pass ? 'ri-pass' : 'ri-fail';
+      const icon = rc.pass ? '✓' : '✗';
+      h += `<div class="ri ${cls}"><div class="ri-icon">${icon}</div><div class="ri-name">${esc(ruleName)}</div><div class="ri-reason">${esc(rc.reason||'')}</div></div>`;
+    } else {
+      h += `<div class="ri ri-unk"><div class="ri-icon">?</div><div class="ri-name">${esc(ruleName)}</div><div class="ri-reason" style="color:#999">AI未返回该条分析</div></div>`;
+    }
+  });
+  // LLM返回的但不在标准规则列表中的
+  if(rulesCheck){
+    rulesCheck.forEach(rc => {
+      if(rc.rule && !allRules.some(r => r === rc.rule || r.includes(rc.rule) || rc.rule.includes(r))){
+        const cls = rc.pass ? 'ri-pass' : 'ri-fail';
+        const icon = rc.pass ? '✓' : '✗';
+        h += `<div class="ri ${cls}"><div class="ri-icon">${icon}</div><div class="ri-name">${esc(rc.rule)}</div><div class="ri-reason">${esc(rc.reason||'')}</div></div>`;
+      }
+    });
+  }
+  if(!h) h = '<div style="color:#999;font-size:11px">无逐条规则分析数据</div>';
+  return h;
+}
 init();
 </script>
 </body>
