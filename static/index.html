@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>业务对象识别智能体</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f0f2f5;
+  color: #333;
+  min-height: 100vh;
+}
+
+.header {
+  background: linear-gradient(135deg, #1a73e8, #4285f4);
+  color: #fff;
+  padding: 20px 32px;
+}
+.header h1 { font-size: 22px; font-weight: 600; }
+.header p { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Tab 切换 */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.tab {
+  flex: 1;
+  padding: 10px;
+  text-align: center;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s;
+}
+.tab.active { background: #1a73e8; color: #fff; }
+.tab:hover:not(.active) { background: #f0f0f0; }
+
+/* 卡片 */
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.card h2 {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: #1a1a1a;
+}
+
+/* 上传区 */
+.upload-zone {
+  border: 2px dashed #d9d9d9;
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.upload-zone:hover { border-color: #1a73e8; background: #f8faff; }
+.upload-zone.dragging { border-color: #1a73e8; background: #e8f0fe; }
+.upload-zone .icon { font-size: 48px; margin-bottom: 12px; }
+.upload-zone p { font-size: 14px; color: #999; margin-top: 8px; }
+.upload-zone .filename { color: #1a73e8; font-weight: 600; }
+
+/* 按钮 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-primary { background: #1a73e8; color: #fff; }
+.btn-primary:hover { background: #1557b0; }
+.btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+.btn-outline { background: #fff; border: 1px solid #d9d9d9; color: #333; }
+.btn-outline:hover { border-color: #1a73e8; color: #1a73e8; }
+.btn-sm { padding: 4px 12px; font-size: 12px; }
+
+/* 进度 */
+.progress-bar {
+  display: none;
+  margin: 16px 0;
+}
+.progress-bar .track {
+  height: 6px;
+  background: #e5e5e5;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar .fill {
+  height: 100%;
+  background: #1a73e8;
+  border-radius: 3px;
+  transition: width 0.3s;
+  width: 0%;
+}
+.progress-bar .text {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* 统计 */
+.summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  flex: 1;
+  padding: 16px;
+  border-radius: 10px;
+  text-align: center;
+}
+.stat-card .num { font-size: 28px; font-weight: 700; }
+.stat-card .label { font-size: 12px; margin-top: 4px; }
+.stat-bo { background: #e8f5e9; color: #2e7d32; }
+.stat-not { background: #fce4ec; color: #c62828; }
+.stat-unknown { background: #fff3e0; color: #e65100; }
+.stat-total { background: #e3f2fd; color: #1565c0; }
+
+/* 表格 */
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.result-table th {
+  background: #f5f5f5;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid #e5e5e5;
+  position: sticky;
+  top: 0;
+}
+.result-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+.result-table tr:hover { background: #fafafa; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge-yes { background: #e8f5e9; color: #2e7d32; }
+.badge-no { background: #fce4ec; color: #c62828; }
+.badge-unknown { background: #fff3e0; color: #e65100; }
+
+.confidence {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.conf-high { background: #e8f5e9; color: #2e7d32; }
+.conf-medium { background: #fff3e0; color: #e65100; }
+.conf-low { background: #fce4ec; color: #c62828; }
+
+/* 单个检查 */
+.single-input {
+  display: flex;
+  gap: 8px;
+}
+.single-input input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+.single-input input:focus { border-color: #1a73e8; }
+.single-result {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+/* 列信息 */
+.col-info {
+  background: #e8f0fe;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.col-info .col-name { font-weight: 700; color: #1a73e8; }
+
+/* 规则展示 */
+.rules-content {
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  color: #555;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* 隐藏面板 */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* 表头工具栏 */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.table-wrapper {
+  max-height: 600px;
+  overflow-y: auto;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔍 业务对象识别智能体</h1>
+  <p>基于数据治理规则，自动识别业务对象 — 支持 Excel 批量识别和单个分析</p>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('batch')">📊 Excel 批量识别</div>
+    <div class="tab" onclick="switchTab('single')">🔎 单个分析</div>
+    <div class="tab" onclick="switchTab('rules')">📖 规则说明</div>
+  </div>
+
+  <!-- 批量识别面板 -->
+  <div class="panel active" id="panel-batch">
+    <div class="card">
+      <h2>上传 Excel 文件</h2>
+      <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <div class="icon">📁</div>
+        <div>点击或拖拽上传 <b>.xlsx</b> 文件</div>
+        <p>系统会自动识别包含待检测事物的列</p>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this)">
+      <div class="progress-bar" id="progressBar">
+        <div class="track"><div class="fill" id="progressFill"></div></div>
+        <div class="text" id="progressText">正在分析...</div>
+      </div>
+    </div>
+
+    <!-- 结果区域 -->
+    <div id="resultArea" style="display:none">
+      <div class="card">
+        <div class="col-info" id="colInfo"></div>
+        <div class="summary" id="summaryCards"></div>
+        <div class="toolbar">
+          <h2 style="margin:0">识别结果</h2>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="filterResults('all')">全部</button>
+            <button class="btn btn-outline btn-sm" onclick="filterResults(true)">✅ 是业务对象</button>
+            <button class="btn btn-outline btn-sm" onclick="filterResults(false)">❌ 不是</button>
+            <button class="btn btn-outline btn-sm" onclick="filterResults(null)">⚠️ 待人工</button>
+            <button class="btn btn-primary btn-sm" onclick="exportResults()">📥 导出结果</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="result-table" id="resultTable">
+            <thead>
+              <tr>
+                <th style="width:40px">#</th>
+                <th>事物名称</th>
+                <th style="width:100px">结论</th>
+                <th style="width:80px">置信度</th>
+                <th>理由</th>
+              </tr>
+            </thead>
+            <tbody id="resultBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 单个分析面板 -->
+  <div class="panel" id="panel-single">
+    <div class="card">
+      <h2>输入事物名称</h2>
+      <div class="single-input">
+        <input type="text" id="singleItem" placeholder="如：采购订单、币种、审批..." onkeydown="if(event.key==='Enter')checkSingle()">
+        <button class="btn btn-primary" id="checkBtn" onclick="checkSingle()">分析</button>
+      </div>
+      <div class="single-result" id="singleResult" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- 规则说明面板 -->
+  <div class="panel" id="panel-rules">
+    <div class="card">
+      <h2>📋 业务对象识别规则</h2>
+      <div class="rules-content" id="idRules"></div>
+    </div>
+    <div class="card">
+      <h2>🏷️ 业务对象命名规则</h2>
+      <div class="rules-content" id="nameRules"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let allResults = [];
+
+// Tab 切换
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab:nth-child(${name==='batch'?1:name==='single'?2:3})`).classList.add('active');
+  document.getElementById(`panel-${name}`).classList.add('active');
+}
+
+// 拖拽上传
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragging'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragging');
+  if (e.dataTransfer.files.length) {
+    document.getElementById('fileInput').files = e.dataTransfer.files;
+    handleFile(document.getElementById('fileInput'));
+  }
+});
+
+// 处理文件上传
+async function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  dropZone.innerHTML = `<div class="icon">📄</div><div class="filename">${file.name}</div><p>正在分析中...</p>`;
+
+  const progressBar = document.getElementById('progressBar');
+  progressBar.style.display = 'block';
+  document.getElementById('progressFill').style.width = '30%';
+  document.getElementById('progressText').textContent = '正在上传并解析文件...';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    document.getElementById('progressFill').style.width = '60%';
+    document.getElementById('progressText').textContent = 'AI 正在逐行分析...';
+
+    const res = await fetch('/api/check-excel', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    document.getElementById('progressFill').style.width = '100%';
+    document.getElementById('progressText').textContent = '分析完成！';
+
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+
+    allResults = data.results || [];
+    renderResults(data);
+  } catch (e) {
+    alert('分析失败: ' + e.message);
+  }
+
+  setTimeout(() => { progressBar.style.display = 'none'; }, 2000);
+}
+
+// 渲染结果
+function renderResults(data) {
+  const resultArea = document.getElementById('resultArea');
+  resultArea.style.display = 'block';
+
+  // 列信息
+  const colInfo = document.getElementById('colInfo');
+  colInfo.innerHTML = `🎯 自动识别目标列：<span class="col-name">${data.target_column}</span>
+    &nbsp;|&nbsp; 共 ${data.total_rows} 行，${data.unique_items} 个不重复项
+    &nbsp;|&nbsp; 表格共 ${data.all_columns.length} 列`;
+
+  // 统计卡片
+  const s = data.summary;
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="stat-card stat-total"><div class="num">${data.unique_items}</div><div class="label">总计</div></div>
+    <div class="stat-card stat-bo"><div class="num">${s.is_bo}</div><div class="label">✅ 是业务对象</div></div>
+    <div class="stat-card stat-not"><div class="num">${s.not_bo}</div><div class="label">❌ 不是</div></div>
+    <div class="stat-card stat-unknown"><div class="num">${s.unknown}</div><div class="label">⚠️ 待人工判断</div></div>
+  `;
+
+  // 结果表格
+  renderTable(allResults);
+}
+
+function renderTable(results) {
+  const tbody = document.getElementById('resultBody');
+  tbody.innerHTML = results.map((r, i) => {
+    const isBo = r.is_bo;
+    const badge = isBo === true ? '<span class="badge badge-yes">✅ 是</span>'
+                : isBo === false ? '<span class="badge badge-no">❌ 不是</span>'
+                : '<span class="badge badge-unknown">⚠️ 待定</span>';
+    const conf = r.confidence || 'low';
+    const confClass = conf === 'high' ? 'conf-high' : conf === 'medium' ? 'conf-medium' : 'conf-low';
+    const confText = conf === 'high' ? '高' : conf === 'medium' ? '中' : '低';
+    return `<tr data-bo="${isBo}">
+      <td>${i + 1}</td>
+      <td><b>${escHtml(r.item)}</b></td>
+      <td>${badge}</td>
+      <td><span class="confidence ${confClass}">${confText}</span></td>
+      <td>${escHtml(r.reason || '')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterResults(type) {
+  if (type === 'all') {
+    renderTable(allResults);
+  } else {
+    renderTable(allResults.filter(r => r.is_bo === type));
+  }
+}
+
+// 导出 Excel
+function exportResults() {
+  if (!allResults.length) return;
+  let csv = '\uFEFF序号,事物名称,是否业务对象,置信度,理由\n';
+  allResults.forEach((r, i) => {
+    const isBo = r.is_bo === true ? '是' : r.is_bo === false ? '否' : '待人工判断';
+    csv += `${i+1},"${r.item}",${isBo},${r.confidence},"${(r.reason||'').replace(/"/g,'""')}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '业务对象识别结果.csv';
+  a.click();
+}
+
+// 单个检查
+async function checkSingle() {
+  const item = document.getElementById('singleItem').value.trim();
+  if (!item) return;
+
+  const btn = document.getElementById('checkBtn');
+  btn.disabled = true;
+  btn.textContent = '分析中...';
+
+  const resultDiv = document.getElementById('singleResult');
+  resultDiv.style.display = 'block';
+  resultDiv.innerHTML = '<span style="color:#999">分析中...</span>';
+
+  try {
+    const res = await fetch('/api/check-single', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item })
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    resultDiv.innerHTML = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const text = decoder.decode(value, { stream: true });
+      for (const line of text.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.content) {
+            fullText += data.content;
+            resultDiv.innerHTML = renderMd(fullText);
+          }
+        } catch(e) {}
+      }
+    }
+  } catch(e) {
+    resultDiv.innerHTML = `<span style="color:red">分析失败: ${e.message}</span>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = '分析';
+}
+
+// 加载规则
+fetch('/api/rules').then(r => r.json()).then(data => {
+  document.getElementById('idRules').textContent = data.identification_rules;
+  document.getElementById('nameRules').textContent = data.naming_rules;
+}).catch(() => {});
+
+// 工具函数
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function renderMd(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`(.+?)`/g,'<code>$1</code>')
+    .replace(/^### (.+)$/gm,'<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,'<h2>$1</h2>')
+    .replace(/^- (.+)$/gm,'<li>$1</li>')
+    .replace(/\n/g,'<br>');
+}
+</script>
+</body>
+</html>

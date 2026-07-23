@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+uploads/
+*.db
+node_modules/
+test_data.xlsx
