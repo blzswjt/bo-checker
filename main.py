@@ -4,33 +4,28 @@ FastAPI 主入口 - 数据建模识别智能体
 """
 import os
 import json
+import uuid
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
+from typing import Optional
 
 from llm import chat_stream
 from rules import ELEMENT_TYPES, get_all_rules_text
-from checker import process_excel, check_single_item
+from checker import parse_excel_file, extract_column_values, check_items_stream, check_single_item
 
-app = FastAPI(title="数据建模识别智能体", version="2.0.0")
+app = FastAPI(title="数据建模识别智能体", version="3.0.0")
 
-# 静态文件
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# 上传目录
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-
-# ============================================================
-# 页面
-# ============================================================
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -40,44 +35,52 @@ async def index():
     return HTMLResponse("<h1>页面未找到</h1>")
 
 
-# ============================================================
-# 获取支持的元素类型列表
-# ============================================================
-
 @app.get("/api/element-types")
 async def get_element_types():
-    """返回所有支持的元素类型"""
     return {"types": ELEMENT_TYPES}
 
 
-# ============================================================
-# 上传 Excel 批量识别
-# ============================================================
-
-@app.post("/api/check-excel")
-async def check_excel(
-    file: UploadFile = File(...),
-    element_type: str = Form(default="业务对象")
-):
-    """上传 Excel 文件，自动找到目标列并逐行识别"""
+@app.post("/api/parse-excel")
+async def parse_excel(file: UploadFile = File(...)):
+    """上传并解析Excel，返回所有子表和列信息（不执行识别）"""
     if not file.filename.endswith((".xlsx", ".xls")):
         return JSONResponse({"error": "请上传 .xlsx 或 .xls 格式文件"}, status_code=400)
 
-    if element_type not in ELEMENT_TYPES:
-        return JSONResponse({"error": f"不支持的元素类型: {element_type}，可选: {ELEMENT_TYPES}"}, status_code=400)
-
-    save_path = UPLOAD_DIR / file.filename
+    file_id = str(uuid.uuid4())[:8]
+    save_name = f"{file_id}_{file.filename}"
+    save_path = UPLOAD_DIR / save_name
     with open(save_path, "wb") as f:
         content = await file.read()
         f.write(content)
 
-    result = process_excel(str(save_path), element_type=element_type)
+    result = parse_excel_file(str(save_path))
+    if "error" in result:
+        return result
+
+    result["file_id"] = file_id
+    result["file_name"] = file.filename
+    result["file_path"] = save_name
     return result
 
 
-# ============================================================
-# 单个事物识别（流式）
-# ============================================================
+class CheckRequest(BaseModel):
+    items: list[str]
+    element_type: str = "业务对象"
+    batch_size: int = 5
+
+
+@app.post("/api/check-items")
+async def check_items(req: CheckRequest):
+    """SSE流式逐批识别，实时推送进度和结果"""
+    if req.element_type not in ELEMENT_TYPES:
+        return JSONResponse({"error": f"不支持的元素类型: {req.element_type}"}, status_code=400)
+
+    def event_stream():
+        for event in check_items_stream(req.items, req.element_type, req.batch_size):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
 
 class SingleCheckRequest(BaseModel):
     item: str
@@ -86,7 +89,7 @@ class SingleCheckRequest(BaseModel):
 
 @app.post("/api/check-single")
 async def check_single(req: SingleCheckRequest):
-    """流式判断单个事物是否为指定元素类型"""
+    """流式判断单个事物"""
     if req.element_type not in ELEMENT_TYPES:
         return JSONResponse({"error": f"不支持的元素类型: {req.element_type}"}, status_code=400)
 
@@ -100,30 +103,30 @@ async def check_single(req: SingleCheckRequest):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
-# ============================================================
-# 规则查看
-# ============================================================
+@app.get("/api/column-values")
+async def get_column_values(file_path: str, sheet: str, column: str):
+    """获取指定文件中指定子表指定列的所有非空唯一值"""
+    full_path = UPLOAD_DIR / file_path
+    if not full_path.exists():
+        return JSONResponse({"error": "文件不存在"}, status_code=404)
+    values = extract_column_values(str(full_path), sheet, column)
+    return {"values": values, "count": len(values)}
+
 
 @app.get("/api/rules")
 async def get_rules():
-    """返回所有元素类型的识别规则和命名规则"""
     return {"rules": get_all_rules_text()}
 
 
 if __name__ == "__main__":
     import uvicorn
     import sys
-
-    # 启动诊断
     print("=" * 50)
     print(f"Python: {sys.version}")
     print(f"工作目录: {os.getcwd()}")
-    print(f"PORT 环境变量: {os.getenv('PORT', '未设置')}")
+    print(f"PORT: {os.getenv('PORT', '未设置')}")
     print(f"LLM_API_KEY: {'已配置' if os.getenv('LLM_API_KEY') else '未配置'}")
-    print(f"LLM_BASE_URL: {os.getenv('LLM_BASE_URL', '未设置')}")
-    print(f"文件列表: {os.listdir('.')}")
     print("=" * 50)
-
     port = int(os.getenv("PORT", 8005))
     print(f"启动服务: http://0.0.0.0:{port}")
     uvicorn.run("main:app", host="0.0.0.0", port=port)

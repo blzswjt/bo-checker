@@ -5,644 +5,659 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>数据建模识别智能体</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f0f2f5;
-  color: #333;
-  min-height: 100vh;
-}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333;min-height:100vh}
+.header{background:linear-gradient(135deg,#1a73e8,#4285f4);color:#fff;padding:16px 32px;display:flex;justify-content:space-between;align-items:center}
+.header-left h1{font-size:20px;font-weight:600}
+.header-left p{font-size:12px;opacity:.85;margin-top:2px}
+.nav-tabs{display:flex;gap:4px}
+.nav-tab{padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;background:rgba(255,255,255,.15);color:#fff;border:none;transition:all .2s}
+.nav-tab.active{background:#fff;color:#1a73e8}
+.nav-tab:hover:not(.active){background:rgba(255,255,255,.25)}
+.container{max-width:1200px;margin:0 auto;padding:20px}
+.page{display:none}.page.active{display:block}
 
-.header {
-  background: linear-gradient(135deg, #1a73e8, #4285f4);
-  color: #fff;
-  padding: 20px 32px;
-}
-.header h1 { font-size: 22px; font-weight: 600; }
-.header p { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+/* 新建任务按钮 */
+.new-task-btn{width:100%;padding:14px;border:2px dashed #d0d0d0;border-radius:12px;background:#fff;cursor:pointer;font-size:14px;color:#888;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;margin-bottom:16px}
+.new-task-btn:hover{border-color:#1a73e8;color:#1a73e8;background:#f8faff}
 
-.container {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 24px;
-}
+/* 任务卡片 */
+.task-card{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);border:1px solid #e8e8e8;position:relative}
+.task-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.task-title{font-size:15px;font-weight:600;color:#1a1a1a;display:flex;align-items:center;gap:8px}
+.task-status{font-size:12px;padding:3px 10px;border-radius:12px;font-weight:500}
+.status-config{background:#e3f2fd;color:#1565c0}
+.status-running{background:#fff3e0;color:#e65100}
+.status-done{background:#e8f5e9;color:#2e7d32}
+.status-error{background:#fce4ec;color:#c62828}
+.task-close{background:none;border:none;cursor:pointer;font-size:18px;color:#ccc;padding:4px}
+.task-close:hover{color:#e53935}
 
-/* Tab 切换 */
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 20px;
-  background: #fff;
-  border-radius: 10px;
-  padding: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-}
-.tab {
-  flex: 1;
-  padding: 10px;
-  text-align: center;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: #666;
-  transition: all 0.2s;
-}
-.tab.active { background: #1a73e8; color: #fff; }
-.tab:hover:not(.active) { background: #f0f0f0; }
-
-/* 卡片 */
-.card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-}
-.card h2 {
-  font-size: 16px;
-  margin-bottom: 16px;
-  color: #1a1a1a;
-}
-
-/* 元素类型选择器 */
-.type-selector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.type-btn {
-  padding: 6px 16px;
-  border: 2px solid #e0e0e0;
-  border-radius: 20px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  color: #555;
-  transition: all 0.2s;
-}
-.type-btn:hover { border-color: #1a73e8; color: #1a73e8; }
-.type-btn.active { border-color: #1a73e8; background: #e8f0fe; color: #1a73e8; }
+/* 元素类型选择 */
+.type-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.type-chip{padding:5px 14px;border:1.5px solid #e0e0e0;border-radius:16px;background:#fff;cursor:pointer;font-size:12px;color:#555;transition:all .2s}
+.type-chip:hover{border-color:#1a73e8;color:#1a73e8}
+.type-chip.active{border-color:#1a73e8;background:#e8f0fe;color:#1a73e8;font-weight:600}
 
 /* 上传区 */
-.upload-zone {
-  border: 2px dashed #d9d9d9;
-  border-radius: 12px;
-  padding: 40px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.upload-zone:hover { border-color: #1a73e8; background: #f8faff; }
-.upload-zone.dragging { border-color: #1a73e8; background: #e8f0fe; }
-.upload-zone .icon { font-size: 48px; margin-bottom: 12px; }
-.upload-zone p { font-size: 14px; color: #999; margin-top: 8px; }
-.upload-zone .filename { color: #1a73e8; font-weight: 600; }
+.upload-zone{border:2px dashed #d9d9d9;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .2s}
+.upload-zone:hover{border-color:#1a73e8;background:#f8faff}
+.upload-zone .icon{font-size:36px;margin-bottom:8px}
+.upload-zone p{font-size:13px;color:#999;margin-top:4px}
 
-/* 按钮 */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-primary { background: #1a73e8; color: #fff; }
-.btn-primary:hover { background: #1557b0; }
-.btn-primary:disabled { background: #ccc; cursor: not-allowed; }
-.btn-outline { background: #fff; border: 1px solid #d9d9d9; color: #333; }
-.btn-outline:hover { border-color: #1a73e8; color: #1a73e8; }
-.btn-sm { padding: 4px 12px; font-size: 12px; }
+/* 表/列选择 */
+.selector{margin-top:14px}
+.selector h3{font-size:14px;margin-bottom:10px;color:#333}
+.sheet-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.sheet-tab{padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;background:#f5f5f5;color:#666;border:1.5px solid transparent;transition:all .2s}
+.sheet-tab.active{background:#e8f0fe;color:#1a73e8;border-color:#1a73e8;font-weight:600}
+.sheet-tab:hover:not(.active){background:#eee}
+.sheet-tab.ai-pick{position:relative}
+.sheet-tab.ai-pick::after{content:"AI";position:absolute;top:-6px;right:-6px;background:#ff9800;color:#fff;font-size:9px;padding:1px 4px;border-radius:4px;font-weight:700}
 
-/* 进度 */
-.progress-bar {
-  display: none;
-  margin: 16px 0;
-}
-.progress-bar .track {
-  height: 6px;
-  background: #e5e5e5;
-  border-radius: 3px;
-  overflow: hidden;
-}
-.progress-bar .fill {
-  height: 100%;
-  background: #1a73e8;
-  border-radius: 3px;
-  transition: width 0.3s;
-  width: 0%;
-}
-.progress-bar .text {
-  font-size: 12px;
-  color: #999;
-  margin-top: 4px;
-}
+.col-list{max-height:280px;overflow-y:auto;border:1px solid #eee;border-radius:8px}
+.col-row{display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #f5f5f5;cursor:pointer;transition:background .15s;gap:10px}
+.col-row:hover{background:#f8f8f8}
+.col-row.selected{background:#e8f0fe}
+.col-row.ai-col{position:relative}
+.col-radio{width:16px;height:16px;border-radius:50%;border:2px solid #ccc;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.col-row.selected .col-radio{border-color:#1a73e8}
+.col-row.selected .col-radio::after{content:"";width:8px;height:8px;border-radius:50%;background:#1a73e8}
+.col-name{font-size:13px;font-weight:600;min-width:140px;color:#333}
+.col-meta{font-size:11px;color:#999;flex-shrink:0}
+.col-sample{font-size:11px;color:#777;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.col-ai-badge{background:#ff9800;color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;flex-shrink:0}
 
-/* 统计 */
-.summary {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-.stat-card {
-  flex: 1;
-  padding: 16px;
-  border-radius: 10px;
-  text-align: center;
-}
-.stat-card .num { font-size: 28px; font-weight: 700; }
-.stat-card .label { font-size: 12px; margin-top: 4px; }
-.stat-bo { background: #e8f5e9; color: #2e7d32; }
-.stat-not { background: #fce4ec; color: #c62828; }
-.stat-unknown { background: #fff3e0; color: #e65100; }
-.stat-total { background: #e3f2fd; color: #1565c0; }
+/* 操作按钮 */
+.action-row{display:flex;gap:8px;margin-top:14px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 18px;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
+.btn-primary{background:#1a73e8;color:#fff}.btn-primary:hover{background:#1557b0}
+.btn-primary:disabled{background:#ccc;cursor:not-allowed}
+.btn-outline{background:#fff;border:1px solid #d9d9d9;color:#333}.btn-outline:hover{border-color:#1a73e8;color:#1a73e8}
+.btn-sm{padding:4px 12px;font-size:11px}
+.btn-danger{background:#fff;border:1px solid #ffcdd2;color:#e53935}.btn-danger:hover{background:#fce4ec}
 
-/* 表格 */
-.result-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.result-table th {
-  background: #f5f5f5;
-  padding: 10px 12px;
-  text-align: left;
-  font-weight: 600;
-  border-bottom: 2px solid #e5e5e5;
-  position: sticky;
-  top: 0;
-}
-.result-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f0f0f0;
-  vertical-align: top;
-}
-.result-table tr:hover { background: #fafafa; }
+/* 进度条 */
+.progress-section{margin-top:14px}
+.progress-track{height:8px;background:#e8e8e8;border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#1a73e8,#42a5f5);border-radius:4px;transition:width .4s ease;width:0%}
+.progress-text{font-size:12px;color:#888;margin-top:4px;display:flex;justify-content:space-between}
 
-.badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.badge-yes { background: #e8f5e9; color: #2e7d32; }
-.badge-no { background: #fce4ec; color: #c62828; }
-.badge-unknown { background: #fff3e0; color: #e65100; }
+/* 统计卡片 */
+.stats{display:flex;gap:10px;margin:14px 0}
+.stat{flex:1;padding:12px;border-radius:8px;text-align:center}
+.stat .num{font-size:24px;font-weight:700}
+.stat .label{font-size:11px;margin-top:2px}
+.stat-total{background:#e3f2fd;color:#1565c0}
+.stat-yes{background:#e8f5e9;color:#2e7d32}
+.stat-no{background:#fce4ec;color:#c62828}
+.stat-unk{background:#fff3e0;color:#e65100}
 
-.confidence {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-}
-.conf-high { background: #e8f5e9; color: #2e7d32; }
-.conf-medium { background: #fff3e0; color: #e65100; }
-.conf-low { background: #fce4ec; color: #c62828; }
+/* 结果表格 */
+.result-section{margin-top:14px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.tbl-wrap{max-height:400px;overflow-y:auto;border:1px solid #eee;border-radius:8px}
+.rtbl{width:100%;border-collapse:collapse;font-size:12px}
+.rtbl th{background:#f8f8f8;padding:8px 10px;text-align:left;font-weight:600;border-bottom:2px solid #e8e8e8;position:sticky;top:0;z-index:1}
+.rtbl td{padding:7px 10px;border-bottom:1px solid #f3f3f3;vertical-align:top}
+.rtbl tr:hover{background:#fafafa}
+.rtbl tr.new-row{animation:fadeIn .3s ease}
+@keyframes fadeIn{from{background:#e8f0fe}to{background:transparent}}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-yes{background:#e8f5e9;color:#2e7d32}
+.badge-no{background:#fce4ec;color:#c62828}
+.badge-unk{background:#fff3e0;color:#e65100}
+.conf{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px}
+.conf-high{background:#e8f5e9;color:#2e7d32}
+.conf-med{background:#fff3e0;color:#e65100}
+.conf-low{background:#fce4ec;color:#c62828}
 
-/* 单个检查 */
-.single-input {
-  display: flex;
-  gap: 8px;
-}
-.single-input input {
-  flex: 1;
-  padding: 10px 14px;
-  border: 1px solid #d9d9d9;
-  border-radius: 8px;
-  font-size: 14px;
-  outline: none;
-}
-.single-input input:focus { border-color: #1a73e8; }
-.single-result {
-  margin-top: 16px;
-  padding: 16px;
-  background: #f9f9f9;
-  border-radius: 8px;
-  font-size: 14px;
-  line-height: 1.8;
-  white-space: pre-wrap;
-}
+/* 单个分析 */
+.single-section{max-width:700px}
+.single-input{display:flex;gap:8px;margin-top:10px}
+.single-input input{flex:1;padding:10px 14px;border:1px solid #d9d9d9;border-radius:8px;font-size:14px;outline:none}
+.single-input input:focus{border-color:#1a73e8}
+.single-result{margin-top:16px;padding:16px;background:#f9f9f9;border-radius:8px;font-size:14px;line-height:1.8;white-space:pre-wrap}
 
-/* 列信息 */
-.col-info {
-  background: #e8f0fe;
-  padding: 10px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.col-info .col-name { font-weight: 700; color: #1a73e8; }
-
-/* 规则展示 */
-.rules-content {
-  font-size: 13px;
-  line-height: 1.8;
-  white-space: pre-wrap;
-  color: #555;
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-/* 隐藏面板 */
-.panel { display: none; }
-.panel.active { display: block; }
-
-/* 表头工具栏 */
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.table-wrapper {
-  max-height: 600px;
-  overflow-y: auto;
-  border: 1px solid #e5e5e5;
-  border-radius: 8px;
-}
-
-/* 规则Tab */
-.rules-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.rules-tab {
-  padding: 6px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  background: #f5f5f5;
-  color: #666;
-  border: none;
-  transition: all 0.2s;
-}
-.rules-tab.active { background: #1a73e8; color: #fff; }
-.rules-tab:hover:not(.active) { background: #e8e8e8; }
+/* 规则 */
+.rules-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}
+.rules-tab{padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:#f5f5f5;color:#666;border:none}
+.rules-tab.active{background:#1a73e8;color:#fff}
+.rules-content{font-size:13px;line-height:1.8;white-space:pre-wrap;color:#555;max-height:600px;overflow-y:auto;padding:16px;background:#fafafa;border-radius:8px}
 </style>
 </head>
 <body>
-
 <div class="header">
-  <h1>🔍 数据建模识别智能体</h1>
-  <p>基于数据治理规则，自动识别各类元素 — 支持主题域、业务对象、逻辑实体、业务属性等</p>
+  <div class="header-left">
+    <h1>🔍 数据建模识别智能体</h1>
+    <p>支持主题域、业务对象、逻辑实体、业务属性等多元素类型并发识别</p>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('tasks')">📊 识别任务</button>
+    <button class="nav-tab" onclick="showPage('single')">🔎 单个分析</button>
+    <button class="nav-tab" onclick="showPage('rules')">📖 规则说明</button>
+  </div>
 </div>
 
 <div class="container">
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('batch')">📊 Excel 批量识别</div>
-    <div class="tab" onclick="switchTab('single')">🔎 单个分析</div>
-    <div class="tab" onclick="switchTab('rules')">📖 规则说明</div>
+  <!-- 任务页 -->
+  <div class="page active" id="page-tasks">
+    <button class="new-task-btn" onclick="createTask()">➕ 新建识别任务</button>
+    <div id="taskList"></div>
+    <div id="emptyHint" style="text-align:center;color:#bbb;padding:60px 0;font-size:14px">
+      点击上方按钮创建新的识别任务<br>可以同时运行多个不同元素类型的任务
+    </div>
   </div>
 
-  <!-- 批量识别面板 -->
-  <div class="panel active" id="panel-batch">
-    <div class="card">
-      <h2>选择元素类型</h2>
-      <div class="type-selector" id="batchTypeSelector"></div>
-    </div>
-    <div class="card">
-      <h2>上传 Excel 文件</h2>
-      <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <div class="icon">📁</div>
-        <div>点击或拖拽上传 <b>.xlsx</b> 文件</div>
-        <p>系统会自动在所有子表中找到目标列并按选定类型识别</p>
-      </div>
-      <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this)">
-      <div class="progress-bar" id="progressBar">
-        <div class="track"><div class="fill" id="progressFill"></div></div>
-        <div class="text" id="progressText">正在分析...</div>
-      </div>
-    </div>
-
-    <!-- 结果区域 -->
-    <div id="resultArea" style="display:none">
-      <div class="card">
-        <div class="col-info" id="colInfo"></div>
-        <div class="summary" id="summaryCards"></div>
-        <div class="toolbar">
-          <h2 style="margin:0">识别结果</h2>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-outline btn-sm" onclick="filterResults('all')">全部</button>
-            <button class="btn btn-outline btn-sm" onclick="filterResults(true)">✅ 是</button>
-            <button class="btn btn-outline btn-sm" onclick="filterResults(false)">❌ 不是</button>
-            <button class="btn btn-outline btn-sm" onclick="filterResults(null)">⚠️ 待人工</button>
-            <button class="btn btn-primary btn-sm" onclick="exportResults()">📥 导出结果</button>
-          </div>
+  <!-- 单个分析页 -->
+  <div class="page" id="page-single">
+    <div class="single-section">
+      <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+        <h3 style="margin-bottom:8px">选择元素类型</h3>
+        <div class="type-row" id="singleTypeRow"></div>
+        <h3 style="margin:12px 0 4px">输入事物名称</h3>
+        <div class="single-input">
+          <input type="text" id="singleItem" placeholder="如：采购订单、币种、审批..." onkeydown="if(event.key==='Enter')checkSingle()">
+          <button class="btn btn-primary" id="checkBtn" onclick="checkSingle()">分析</button>
         </div>
-        <div class="table-wrapper">
-          <table class="result-table" id="resultTable">
-            <thead>
-              <tr>
-                <th style="width:40px">#</th>
-                <th>事物名称</th>
-                <th style="width:100px">结论</th>
-                <th style="width:80px">置信度</th>
-                <th>理由</th>
-              </tr>
-            </thead>
-            <tbody id="resultBody"></tbody>
-          </table>
-        </div>
+        <div class="single-result" id="singleResult" style="display:none"></div>
       </div>
     </div>
   </div>
 
-  <!-- 单个分析面板 -->
-  <div class="panel" id="panel-single">
-    <div class="card">
-      <h2>选择元素类型</h2>
-      <div class="type-selector" id="singleTypeSelector"></div>
-    </div>
-    <div class="card">
-      <h2>输入事物名称</h2>
-      <div class="single-input">
-        <input type="text" id="singleItem" placeholder="如：采购订单、币种、审批..." onkeydown="if(event.key==='Enter')checkSingle()">
-        <button class="btn btn-primary" id="checkBtn" onclick="checkSingle()">分析</button>
-      </div>
-      <div class="single-result" id="singleResult" style="display:none"></div>
-    </div>
-  </div>
-
-  <!-- 规则说明面板 -->
-  <div class="panel" id="panel-rules">
-    <div class="card">
-      <h2>📋 各元素类型识别规则</h2>
+  <!-- 规则页 -->
+  <div class="page" id="page-rules">
+    <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <h3 style="margin-bottom:12px">📋 各元素类型识别规则</h3>
       <div class="rules-tabs" id="rulesTabs"></div>
-      <div class="rules-content" id="rulesContent">请选择元素类型查看规则</div>
+      <div class="rules-content" id="rulesContent">加载中...</div>
     </div>
   </div>
 </div>
 
 <script>
-let allResults = [];
-let currentBatchType = '业务对象';
-let currentSingleType = '业务对象';
-let allRules = {};
+// ============ 全局状态 ============
+let elementTypes = [];
+let taskIdCounter = 0;
+let tasks = {}; // id -> task object
+let singleType = '业务对象';
 
-// 初始化元素类型选择器
-async function initTypeSelectors() {
-  try {
-    const res = await fetch('/api/element-types');
-    const data = await res.json();
-    const types = data.types || ['业务对象'];
+// ============ 初始化 ============
+async function init() {
+  const [typesRes, rulesRes] = await Promise.all([
+    fetch('/api/element-types').then(r => r.json()),
+    fetch('/api/rules').then(r => r.json())
+  ]);
+  elementTypes = typesRes.types || ['业务对象'];
+  singleType = elementTypes[0] || '业务对象';
 
-    const batchSelector = document.getElementById('batchTypeSelector');
-    const singleSelector = document.getElementById('singleTypeSelector');
+  // 单个分析的类型选择
+  const row = document.getElementById('singleTypeRow');
+  elementTypes.forEach(t => {
+    const chip = document.createElement('button');
+    chip.className = 'type-chip' + (t === singleType ? ' active' : '');
+    chip.textContent = t;
+    chip.onclick = () => {
+      row.querySelectorAll('.type-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      singleType = t;
+    };
+    row.appendChild(chip);
+  });
 
-    types.forEach(t => {
-      const btn1 = document.createElement('button');
-      btn1.className = 'type-btn' + (t === '业务对象' ? ' active' : '');
-      btn1.textContent = t;
-      btn1.onclick = () => {
-        batchSelector.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
-        btn1.classList.add('active');
-        currentBatchType = t;
-      };
-      batchSelector.appendChild(btn1);
+  // 规则
+  const allRules = rulesRes.rules || {};
+  const tabsEl = document.getElementById('rulesTabs');
+  let first = true;
+  for (const [type, text] of Object.entries(allRules)) {
+    const btn = document.createElement('button');
+    btn.className = 'rules-tab' + (first ? ' active' : '');
+    btn.textContent = type;
+    btn.onclick = () => {
+      tabsEl.querySelectorAll('.rules-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('rulesContent').textContent = text;
+    };
+    tabsEl.appendChild(btn);
+    if (first) { document.getElementById('rulesContent').textContent = text; first = false; }
+  }
+}
 
-      const btn2 = document.createElement('button');
-      btn2.className = 'type-btn' + (t === '业务对象' ? ' active' : '');
-      btn2.textContent = t;
-      btn2.onclick = () => {
-        singleSelector.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
-        btn2.classList.add('active');
-        currentSingleType = t;
-      };
-      singleSelector.appendChild(btn2);
+function showPage(name) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.nav-tab:nth-child(${name==='tasks'?1:name==='single'?2:3})`).classList.add('active');
+  document.getElementById(`page-${name}`).classList.add('active');
+}
+
+// ============ 任务管理 ============
+function createTask() {
+  const id = ++taskIdCounter;
+  const task = {
+    id, status: 'config', elementType: elementTypes[0] || '业务对象',
+    file: null, fileName: '', filePath: '',
+    sheets: [], selectedSheet: null, selectedCol: null,
+    aiRec: null, items: [], results: [], summary: null, error: null
+  };
+  tasks[id] = task;
+  document.getElementById('emptyHint').style.display = 'none';
+  renderTask(task);
+}
+
+function removeTask(id) {
+  const el = document.getElementById(`task-${id}`);
+  if (el) el.remove();
+  delete tasks[id];
+  if (Object.keys(tasks).length === 0) document.getElementById('emptyHint').style.display = '';
+}
+
+function renderTask(task) {
+  const id = task.id;
+  let el = document.getElementById(`task-${id}`);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = `task-${id}`;
+    el.className = 'task-card';
+    document.getElementById('taskList').prepend(el);
+  }
+
+  const statusMap = {config:'配置中',running:'识别中',done:'已完成',error:'错误'};
+  const statusClass = {config:'status-config',running:'status-running',done:'status-done',error:'status-error'};
+
+  let html = `<div class="task-header">
+    <div class="task-title">🔍 任务 #${id} ${task.fileName ? '- '+esc(task.fileName) : ''}</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="task-status ${statusClass[task.status]}">${statusMap[task.status]}</span>
+      <button class="task-close" onclick="removeTask(${id})" title="关闭">✕</button>
+    </div>
+  </div>`;
+
+  if (task.status === 'config') {
+    html += renderConfig(task);
+  } else if (task.status === 'selecting') {
+    html += renderSelector(task);
+  } else if (task.status === 'running' || task.status === 'done') {
+    html += renderRunning(task);
+  } else if (task.status === 'error') {
+    html += `<div style="color:#e53935;font-size:13px">❌ ${esc(task.error || '未知错误')}</div>
+      <div class="action-row"><button class="btn btn-outline" onclick="resetTask(${id})">重新配置</button></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function renderConfig(task) {
+  let html = '<div style="margin-bottom:10px;font-size:13px;color:#666">选择元素类型：</div><div class="type-row">';
+  elementTypes.forEach(t => {
+    html += `<button class="type-chip${t===task.elementType?' active':''}" onclick="setTaskType(${task.id},'${t}')">${t}</button>`;
+  });
+  html += `</div>
+    <div class="upload-zone" onclick="document.getElementById('file-${task.id}').click()">
+      <div class="icon">📁</div>
+      <div>点击或拖拽上传 <b>.xlsx</b> 文件</div>
+      <p>上传后系统会解析文件结构供你选择列</p>
+    </div>
+    <input type="file" id="file-${task.id}" accept=".xlsx,.xls" style="display:none" onchange="handleUpload(${task.id},this)">`;
+  return html;
+}
+
+function renderSelector(task) {
+  const rec = task.aiRec || {};
+  let html = `<div class="selector"><h3>📂 选择子表</h3><div class="sheet-tabs">`;
+  task.sheets.forEach(s => {
+    const isAi = rec.sheet === s.name;
+    const isSel = task.selectedSheet === s.name;
+    html += `<button class="sheet-tab${isSel?' active':''}${isAi?' ai-pick':''}" onclick="selectSheet(${task.id},'${esc(s.name)}')">${esc(s.name)} (${s.rows}行)</button>`;
+  });
+  html += `</div>`;
+
+  // 列列表
+  const sheet = task.sheets.find(s => s.name === task.selectedSheet);
+  if (sheet) {
+    html += `<h3>📋 选择目标列 <span style="font-weight:400;font-size:12px;color:#999">（AI推荐列标有橙色徽章）</span></h3><div class="col-list">`;
+    sheet.columns.forEach(col => {
+      const isSel = task.selectedCol === col.name;
+      const isAi = rec.column === col.name && rec.sheet === task.selectedSheet;
+      html += `<div class="col-row${isSel?' selected':''}" onclick="selectCol(${task.id},'${esc(col.name)}')">
+        <div class="col-radio"></div>
+        <div class="col-name">${esc(col.name)}</div>
+        <div class="col-meta">${col.rows}行 · ${col.unique_count}项</div>
+        ${isAi ? '<span class="col-ai-badge">AI推荐</span>' : ''}
+        <div class="col-sample">示例: ${col.sample.slice(0,4).map(esc).join(', ')}</div>
+      </div>`;
     });
-  } catch(e) {
-    console.error('Failed to load element types', e);
+    html += `</div>`;
   }
+
+  const canStart = task.selectedSheet && task.selectedCol;
+  html += `<div class="action-row">
+    <button class="btn btn-primary" ${canStart?'':`disabled`} onclick="startCheck(${task.id})">🚀 开始识别</button>
+    <button class="btn btn-outline" onclick="resetTask(${task.id})">↩ 重新上传</button>
+    ${canStart ? `<span style="font-size:12px;color:#888">将识别「${esc(task.selectedSheet)}」→「${esc(task.selectedCol)}」中的元素为 <b>${esc(task.elementType)}</b></span>` : ''}
+  </div></div>`;
+  return html;
 }
 
-// Tab 切换
-function switchTab(name) {
-  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelector(`.tabs .tab:nth-child(${name==='batch'?1:name==='single'?2:3})`).classList.add('active');
-  document.getElementById(`panel-${name}`).classList.add('active');
+function renderRunning(task) {
+  const total = task.items.length;
+  const done = task.results.length;
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+
+  let html = `<div style="font-size:13px;color:#666;margin-bottom:6px">
+    识别类型: <b>${esc(task.elementType)}</b> · ${esc(task.selectedSheet)} → ${esc(task.selectedCol)} · 共 ${total} 项（${done}/${total}）</div>`;
+
+  html += `<div class="progress-section">
+    <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div class="progress-text"><span>${done < total ? '⏳ 正在分析...' : '✅ 分析完成'}</span><span>${pct}%</span></div>
+  </div>`;
+
+  if (task.summary) {
+    const s = task.summary;
+    html += `<div class="stats">
+      <div class="stat stat-total"><div class="num">${s.total}</div><div class="label">总计</div></div>
+      <div class="stat stat-yes"><div class="num">${s.is_bo}</div><div class="label">✅ 是${esc(task.elementType)}</div></div>
+      <div class="stat stat-no"><div class="num">${s.not_bo}</div><div class="label">❌ 不是</div></div>
+      <div class="stat stat-unk"><div class="num">${s.unknown}</div><div class="label">⚠️ 待人工</div></div>
+    </div>`;
+  }
+
+  // 工具栏 + 结果表
+  html += `<div class="result-section"><div class="toolbar">
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-outline btn-sm" onclick="filterTask(${task.id},'all')">全部</button>
+      <button class="btn btn-outline btn-sm" onclick="filterTask(${task.id},true)">✅ 是</button>
+      <button class="btn btn-outline btn-sm" onclick="filterTask(${task.id},false)">❌ 不是</button>
+      <button class="btn btn-outline btn-sm" onclick="filterTask(${task.id},null)">⚠️ 待定</button>
+    </div>
+    <button class="btn btn-outline btn-sm" onclick="exportTask(${task.id})">📥 导出</button>
+  </div>
+  <div class="tbl-wrap"><table class="rtbl"><thead><tr>
+    <th style="width:36px">#</th><th>事物名称</th><th style="width:80px">结论</th><th style="width:60px">置信度</th><th>理由</th>
+  </tr></thead><tbody id="tbody-${task.id}">`;
+
+  const results = task._filter ? task.results.filter(r => r.is_bo === task._filter) : task.results;
+  results.forEach((r, i) => {
+    const badge = r.is_bo === true ? '<span class="badge badge-yes">✅ 是</span>'
+                : r.is_bo === false ? '<span class="badge badge-no">❌ 不是</span>'
+                : '<span class="badge badge-unk">⚠️ 待定</span>';
+    const conf = r.confidence || 'low';
+    const cc = conf==='high'?'conf-high':conf==='medium'?'conf-med':'conf-low';
+    const ct = conf==='high'?'高':conf==='medium'?'中':'低';
+    html += `<tr><td>${i+1}</td><td><b>${esc(r.item)}</b></td><td>${badge}</td><td><span class="conf ${cc}">${ct}</span></td><td>${esc(r.reason||'')}</td></tr>`;
+  });
+
+  html += `</tbody></table></div></div>`;
+
+  if (task.status === 'done') {
+    html += `<div class="action-row" style="margin-top:10px">
+      <button class="btn btn-outline" onclick="resetTask(${task.id})">🔄 新建任务</button>
+    </div>`;
+  }
+
+  return html;
 }
 
-// 拖拽上传
-const dropZone = document.getElementById('dropZone');
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragging'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('dragging');
-  if (e.dataTransfer.files.length) {
-    document.getElementById('fileInput').files = e.dataTransfer.files;
-    handleFile(document.getElementById('fileInput'));
-  }
-});
+// ============ 任务操作 ============
+function setTaskType(id, type) {
+  tasks[id].elementType = type;
+  renderTask(tasks[id]);
+}
 
-// 处理文件上传
-async function handleFile(input) {
+function resetTask(id) {
+  tasks[id].status = 'config';
+  tasks[id].results = [];
+  tasks[id].summary = null;
+  tasks[id].error = null;
+  renderTask(tasks[id]);
+}
+
+async function handleUpload(id, input) {
   const file = input.files[0];
   if (!file) return;
+  const task = tasks[id];
+  task.fileName = file.name;
 
-  dropZone.innerHTML = `<div class="icon">📄</div><div class="filename">${file.name}</div><p>正在分析中...</p>`;
-
-  const progressBar = document.getElementById('progressBar');
-  progressBar.style.display = 'block';
-  document.getElementById('progressFill').style.width = '30%';
-  document.getElementById('progressText').textContent = '正在上传并解析文件...';
+  // 修改上传区显示
+  const zone = input.previousElementSibling;
+  zone.innerHTML = `<div class="icon">⏳</div><div>正在解析 <b>${esc(file.name)}</b>...</div>`;
 
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('element_type', currentBatchType);
 
   try {
-    document.getElementById('progressFill').style.width = '60%';
-    document.getElementById('progressText').textContent = `AI 正在逐行分析（${currentBatchType}）...`;
-
-    const res = await fetch('/api/check-excel', { method: 'POST', body: formData });
+    const res = await fetch('/api/parse-excel', { method: 'POST', body: formData });
     const data = await res.json();
+    if (data.error) { task.status = 'error'; task.error = data.error; renderTask(task); return; }
 
-    document.getElementById('progressFill').style.width = '100%';
-    document.getElementById('progressText').textContent = '分析完成！';
+    task.sheets = data.sheets || [];
+    task.filePath = data.file_path;
+    task.aiRec = data.ai_recommendation || {};
 
-    if (data.error) {
-      alert(data.error);
-      return;
-    }
+    // 默认选中AI推荐的表和列
+    if (task.aiRec.sheet) task.selectedSheet = task.aiRec.sheet;
+    else if (task.sheets.length > 0) task.selectedSheet = task.sheets[0].name;
+    if (task.aiRec.column) task.selectedCol = task.aiRec.column;
 
-    allResults = data.results || [];
-    renderResults(data);
-  } catch (e) {
-    alert('分析失败: ' + e.message);
+    task.status = 'selecting';
+  } catch(e) {
+    task.status = 'error';
+    task.error = '解析失败: ' + e.message;
   }
-
-  setTimeout(() => { progressBar.style.display = 'none'; }, 2000);
+  renderTask(task);
 }
 
-// 渲染结果
-function renderResults(data) {
-  const resultArea = document.getElementById('resultArea');
-  resultArea.style.display = 'block';
-
-  const colInfo = document.getElementById('colInfo');
-  const sheetInfo = data.target_sheet ? `子表：<span class="col-name">${data.target_sheet}</span> &nbsp;|&nbsp; ` : '';
-  const matchedKw = data.matched_keyword ? `匹配关键词：「${data.matched_keyword}」 &nbsp;|&nbsp; ` : '';
-  const totalSheets = data.total_sheets ? `共 ${data.total_sheets} 个子表` : '';
-  const elementType = data.element_type || currentBatchType;
-  colInfo.innerHTML = `🎯 ${sheetInfo}目标列：<span class="col-name">${data.target_column}</span>
-    &nbsp;|&nbsp; ${matchedKw}${totalSheets}
-    &nbsp;|&nbsp; 元素类型：<b>${elementType}</b>
-    &nbsp;|&nbsp; ${data.total_rows} 行，${data.unique_items} 个不重复项`;
-
-  const s = data.summary;
-  document.getElementById('summaryCards').innerHTML = `
-    <div class="stat-card stat-total"><div class="num">${data.unique_items}</div><div class="label">总计</div></div>
-    <div class="stat-card stat-bo"><div class="num">${s.is_bo}</div><div class="label">✅ 是${elementType}</div></div>
-    <div class="stat-card stat-not"><div class="num">${s.not_bo}</div><div class="label">❌ 不是</div></div>
-    <div class="stat-card stat-unknown"><div class="num">${s.unknown}</div><div class="label">⚠️ 待人工判断</div></div>
-  `;
-
-  renderTable(allResults);
-}
-
-function renderTable(results) {
-  const tbody = document.getElementById('resultBody');
-  tbody.innerHTML = results.map((r, i) => {
-    const isBo = r.is_bo;
-    const badge = isBo === true ? '<span class="badge badge-yes">✅ 是</span>'
-                : isBo === false ? '<span class="badge badge-no">❌ 不是</span>'
-                : '<span class="badge badge-unknown">⚠️ 待定</span>';
-    const conf = r.confidence || 'low';
-    const confClass = conf === 'high' ? 'conf-high' : conf === 'medium' ? 'conf-medium' : 'conf-low';
-    const confText = conf === 'high' ? '高' : conf === 'medium' ? '中' : '低';
-    return `<tr data-bo="${isBo}">
-      <td>${i + 1}</td>
-      <td><b>${escHtml(r.item)}</b></td>
-      <td>${badge}</td>
-      <td><span class="confidence ${confClass}">${confText}</span></td>
-      <td>${escHtml(r.reason || '')}</td>
-    </tr>`;
-  }).join('');
-}
-
-function filterResults(type) {
-  if (type === 'all') {
-    renderTable(allResults);
-  } else {
-    renderTable(allResults.filter(r => r.is_bo === type));
+function selectSheet(id, sheetName) {
+  const task = tasks[id];
+  task.selectedSheet = sheetName;
+  task.selectedCol = null;
+  // 检查AI推荐列是否在这个sheet
+  if (task.aiRec && task.aiRec.sheet === sheetName && task.aiRec.column) {
+    task.selectedCol = task.aiRec.column;
   }
+  renderTask(task);
 }
 
-// 导出 CSV
-function exportResults() {
-  if (!allResults.length) return;
-  let csv = '\uFEFF序号,事物名称,是否匹配,置信度,理由\n';
-  allResults.forEach((r, i) => {
-    const isBo = r.is_bo === true ? '是' : r.is_bo === false ? '否' : '待人工判断';
-    csv += `${i+1},"${r.item}",${isBo},${r.confidence},"${(r.reason||'').replace(/"/g,'""')}"\n`;
-  });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = '识别结果.csv';
-  a.click();
+function selectCol(id, colName) {
+  tasks[id].selectedCol = colName;
+  renderTask(tasks[id]);
 }
 
-// 单个检查
-async function checkSingle() {
-  const item = document.getElementById('singleItem').value.trim();
-  if (!item) return;
+async function startCheck(id) {
+  const task = tasks[id];
+  // 从sheet数据中提取items
+  const sheet = task.sheets.find(s => s.name === task.selectedSheet);
+  if (!sheet) return;
+  const col = sheet.columns.find(c => c.name === task.selectedCol);
+  if (!col) return;
 
-  const btn = document.getElementById('checkBtn');
-  btn.disabled = true;
-  btn.textContent = '分析中...';
+  // 需要从后端获取该列的所有值（去重后）
+  // 我们让后端在parse-excel时返回所有列的完整值，但为了节省传输，
+  // 这里重新请求一次，传sheet和column参数
+  // 不过更简单的方式：在parse阶段就返回每列的所有唯一值
+  // 为了简化，我让col对象包含一个_allValues字段
+  // 但由于parse-excel没返回_allValues，我们换个方式：
+  // 在startCheck时，先调用一个轻量API获取该列的值
 
-  const resultDiv = document.getElementById('singleResult');
-  resultDiv.style.display = 'block';
-  resultDiv.innerHTML = '<span style="color:#999">分析中...</span>';
+  // 实际上，最简单的方式是在parse-excel返回时就包含所有列的唯一值
+  // 但数据量可能很大。折中方案：让col.sample包含更多数据，或者新增一个API
+
+  // 为了简化，我在checker.py的parse_excel_file中给每列加上unique_values字段
+  // 但现在先做个临时方案：用文件路径+sheet+column再请求一次
 
   try {
-    const res = await fetch('/api/check-single', {
+    const res = await fetch(`/api/column-values?file_path=${encodeURIComponent(task.filePath)}&sheet=${encodeURIComponent(task.selectedSheet)}&column=${encodeURIComponent(task.selectedCol)}`);
+    const data = await res.json();
+    task.items = data.values || [];
+  } catch(e) {
+    // fallback: 从sample中取
+    task.items = col.sample || [];
+  }
+
+  if (task.items.length === 0) {
+    task.status = 'error';
+    task.error = '该列没有有效数据';
+    renderTask(task);
+    return;
+  }
+
+  task.status = 'running';
+  task.results = [];
+  task.summary = null;
+  renderTask(task);
+
+  // SSE流式请求
+  try {
+    const res = await fetch('/api/check-items', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item, element_type: currentSingleType })
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ items: task.items, element_type: task.elementType, batch_size: 5 })
     });
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
-    let fullText = '';
-    resultDiv.innerHTML = '';
+    let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      const text = decoder.decode(value, { stream: true });
-      for (const line of text.split('\n')) {
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         try {
-          const data = JSON.parse(line.slice(6));
-          if (data.content) {
-            fullText += data.content;
-            resultDiv.innerHTML = renderMd(fullText);
+          const evt = JSON.parse(line.slice(6));
+          if (evt.type === 'result') {
+            task.results.push(evt);
+            updateTaskTable(task);
+          } else if (evt.type === 'progress') {
+            updateTaskProgress(task, evt);
+          } else if (evt.type === 'done') {
+            task.summary = evt.summary;
+            task.status = 'done';
+            renderTask(task);
           }
         } catch(e) {}
       }
     }
   } catch(e) {
-    resultDiv.innerHTML = `<span style="color:red">分析失败: ${e.message}</span>`;
+    task.status = 'error';
+    task.error = '识别请求失败: ' + e.message;
+    renderTask(task);
   }
-
-  btn.disabled = false;
-  btn.textContent = '分析';
 }
 
-// 加载规则
-async function loadRules() {
-  try {
-    const res = await fetch('/api/rules');
-    const data = await res.json();
-    allRules = data.rules || {};
+// 增量更新进度条和表格（不重新渲染整个卡片）
+function updateTaskProgress(task, evt) {
+  const el = document.getElementById(`task-${task.id}`);
+  if (!el) return;
+  const pct = evt.total > 0 ? Math.round(evt.current / evt.total * 100) : 0;
+  const fill = el.querySelector('.progress-fill');
+  const texts = el.querySelectorAll('.progress-text span');
+  if (fill) fill.style.width = pct + '%';
+  if (texts[0]) texts[0].textContent = `⏳ 已分析 ${evt.current}/${evt.total}`;
+  if (texts[1]) texts[1].textContent = pct + '%';
 
-    const tabsContainer = document.getElementById('rulesTabs');
-    tabsContainer.innerHTML = '';
-    let first = true;
-    for (const type of Object.keys(allRules)) {
-      const btn = document.createElement('button');
-      btn.className = 'rules-tab' + (first ? ' active' : '');
-      btn.textContent = type;
-      btn.onclick = () => {
-        tabsContainer.querySelectorAll('.rules-tab').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById('rulesContent').textContent = allRules[type];
-      };
-      tabsContainer.appendChild(btn);
-      if (first) {
-        document.getElementById('rulesContent').textContent = allRules[type];
-        first = false;
+  // 更新头部计数
+  const header = el.querySelector('.task-title');
+  if (header) {
+    const base = `🔍 任务 #${task.id} ${task.fileName ? '- '+esc(task.fileName) : ''}`;
+    header.textContent = base + ` (${evt.current}/${evt.total})`;
+  }
+}
+
+function updateTaskTable(task) {
+  const tbody = document.getElementById(`tbody-${task.id}`);
+  if (!tbody) { renderTask(task); return; }
+
+  const r = task.results[task.results.length - 1];
+  if (!r) return;
+
+  const badge = r.is_bo === true ? '<span class="badge badge-yes">✅ 是</span>'
+              : r.is_bo === false ? '<span class="badge badge-no">❌ 不是</span>'
+              : '<span class="badge badge-unk">⚠️ 待定</span>';
+  const conf = r.confidence || 'low';
+  const cc = conf==='high'?'conf-high':conf==='medium'?'conf-med':'conf-low';
+  const ct = conf==='high'?'高':conf==='medium'?'中':'低';
+
+  const tr = document.createElement('tr');
+  tr.className = 'new-row';
+  tr.innerHTML = `<td>${task.results.length}</td><td><b>${esc(r.item)}</b></td><td>${badge}</td><td><span class="conf ${cc}">${ct}</span></td><td>${esc(r.reason||'')}</td>`;
+  tbody.appendChild(tr);
+  tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // 更新进度
+  const total = task.items.length;
+  const done = task.results.length;
+  const pct = Math.round(done / total * 100);
+  const el = document.getElementById(`task-${task.id}`);
+  const fill = el?.querySelector('.progress-fill');
+  const texts = el?.querySelectorAll('.progress-text span');
+  if (fill) fill.style.width = pct + '%';
+  if (texts?.[0]) texts[0].textContent = `⏳ 已分析 ${done}/${total}`;
+  if (texts?.[1]) texts[1].textContent = pct + '%';
+}
+
+function filterTask(id, type) {
+  const task = tasks[id];
+  task._filter = type === 'all' ? null : type;
+  renderTask(task);
+}
+
+function exportTask(id) {
+  const task = tasks[id];
+  if (!task.results.length) return;
+  let csv = '\uFEFF序号,事物名称,是否匹配,置信度,理由\n';
+  task.results.forEach((r, i) => {
+    const v = r.is_bo === true ? '是' : r.is_bo === false ? '否' : '待人工判断';
+    csv += `${i+1},"${r.item}",${v},${r.confidence},"${(r.reason||'').replace(/"/g,'""')}"\n`;
+  });
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${task.elementType}_识别结果.csv`;
+  a.click();
+}
+
+// ============ 单个分析 ============
+async function checkSingle() {
+  const item = document.getElementById('singleItem').value.trim();
+  if (!item) return;
+  const btn = document.getElementById('checkBtn');
+  btn.disabled = true; btn.textContent = '分析中...';
+  const div = document.getElementById('singleResult');
+  div.style.display = 'block'; div.innerHTML = '<span style="color:#999">分析中...</span>';
+
+  try {
+    const res = await fetch('/api/check-single', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({item, element_type: singleType})
+    });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = '';
+    div.innerHTML = '';
+    while(true){
+      const {done,value} = await reader.read();
+      if(done) break;
+      const text = decoder.decode(value,{stream:true});
+      for(const line of text.split('\n')){
+        if(!line.startsWith('data: ')) continue;
+        try{
+          const d = JSON.parse(line.slice(6));
+          if(d.content){full+=d.content;div.innerHTML=renderMd(full)}
+        }catch(e){}
       }
     }
-  } catch(e) {
-    console.error('Failed to load rules', e);
-  }
+  }catch(e){div.innerHTML=`<span style="color:red">分析失败: ${e.message}</span>`}
+  btn.disabled=false;btn.textContent='分析';
 }
 
-// 初始化
-initTypeSelectors();
-loadRules();
-
-// 工具函数
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function renderMd(t) {
+// ============ 工具 ============
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function renderMd(t){
   return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
     .replace(/`(.+?)`/g,'<code>$1</code>')
@@ -651,6 +666,8 @@ function renderMd(t) {
     .replace(/^- (.+)$/gm,'<li>$1</li>')
     .replace(/\n/g,'<br>');
 }
+
+init();
 </script>
 </body>
 </html>

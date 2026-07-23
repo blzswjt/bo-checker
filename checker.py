@@ -1,6 +1,9 @@
 """
-核心检测逻辑 - 自动找到目标列并逐行判断是否为指定元素类型
-支持：主题域分类、主题域分组、主题域、业务对象、逻辑实体、业务属性
+核心检测逻辑
+- parse_excel_file: 解析Excel结构（所有子表、列、样本数据）
+- find_target_column: 自动识别目标列（关键词+启发式）
+- check_items_stream: SSE流式逐批识别（生成器）
+- check_single_item: 单个事物识别消息构建
 """
 import json
 import re
@@ -11,9 +14,7 @@ from rules import build_batch_prompt, build_check_prompt, ELEMENT_TYPES
 
 
 def find_target_column(df: pd.DataFrame) -> tuple[str, list[str]]:
-    """
-    自动识别包含待检测事物的列。
-    """
+    """自动识别包含待检测事物的列"""
     keywords = [
         "业务对象唯一标识", "业务对象名称", "业务对象编码",
         "逻辑实体名称", "逻辑实体唯一标识",
@@ -31,7 +32,6 @@ def find_target_column(df: pd.DataFrame) -> tuple[str, list[str]]:
                 if values:
                     return col_str, values
 
-    # 启发式
     candidates = []
     for col in df.columns:
         series = df[col].dropna()
@@ -39,20 +39,16 @@ def find_target_column(df: pd.DataFrame) -> tuple[str, list[str]]:
             continue
         sample = series.head(20)
         str_sample = sample.astype(str)
-
         numeric_count = str_sample.apply(lambda x: x.replace(".", "").replace("-", "").isdigit()).sum()
         if numeric_count > len(str_sample) * 0.7:
             continue
-
         date_pattern = re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}')
         date_count = str_sample.apply(lambda x: bool(date_pattern.match(str(x)))).sum()
         if date_count > len(str_sample) * 0.5:
             continue
-
         avg_len = str_sample.apply(len).mean()
         if avg_len > 80:
             continue
-
         values = series.astype(str).str.strip().tolist()
         values = [v for v in values if v and v != "nan" and len(v) > 1]
         if len(values) >= 2:
@@ -69,71 +65,11 @@ def find_target_column(df: pd.DataFrame) -> tuple[str, list[str]]:
     return col, values
 
 
-def check_items_batch(items: list[str], element_type: str = "业务对象", batch_size: int = 10) -> list[dict]:
-    """批量调用 LLM 判断"""
-    all_results = []
-
-    for i in range(0, len(items), batch_size):
-        batch = items[i:i + batch_size]
-        numbered = "\n".join(f"{j+1}. {item}" for j, item in enumerate(batch))
-
-        prompt = build_batch_prompt(element_type, numbered)
-        if not prompt:
-            for item in batch:
-                all_results.append({"item": item, "is_bo": None, "confidence": "low", "reason": f"未知元素类型: {element_type}"})
-            continue
-
-        messages = [
-            {"role": "system", "content": f"你是数据治理专家，严格按JSON格式输出结果。"},
-            {"role": "user", "content": prompt}
-        ]
-
-        try:
-            response = chat(messages, temperature=0.1)
-            parsed = parse_llm_response(response, batch)
-            all_results.extend(parsed)
-        except Exception as e:
-            for item in batch:
-                all_results.append({"item": item, "is_bo": None, "confidence": "low", "reason": f"AI分析出错: {str(e)}"})
-
-    return all_results
-
-
-def parse_llm_response(response: str, items: list[str]) -> list[dict]:
-    """解析 LLM 返回的 JSON 结果"""
-    json_match = re.search(r'\{[\s\S]*"results"[\s\S]*\}', response)
-    if json_match:
-        try:
-            data = json.loads(json_match.group())
-            results = data.get("results", [])
-            if len(results) == len(items):
-                return results
-            elif len(results) > 0:
-                result_map = {r["item"]: r for r in results}
-                return [
-                    result_map.get(item, {"item": item, "is_bo": None, "confidence": "low", "reason": "未返回该项结果"})
-                    for item in items
-                ]
-        except json.JSONDecodeError:
-            pass
-
-    results = []
-    for item in items:
-        results.append({"item": item, "is_bo": None, "confidence": "low", "reason": "无法自动解析，请人工判断"})
-    return results
-
-
-def check_single_item(item: str, element_type: str = "业务对象") -> list[dict]:
-    """构建单个事物详细判断的消息列表"""
-    prompt = build_check_prompt(element_type)
-    return [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": f"请判断「{item}」是否是{element_type}？"}
-    ]
-
-
-def process_excel(file_path: str, element_type: str = "业务对象") -> dict:
-    """处理上传的 Excel 文件（支持多 Sheet），跨所有子表自动找到目标列"""
+def parse_excel_file(file_path: str) -> dict:
+    """
+    解析Excel文件结构，返回所有子表、列信息和AI推荐列。
+    不执行识别，只做结构解析。
+    """
     path = Path(file_path)
     if not path.exists():
         return {"error": "文件不存在"}
@@ -146,79 +82,179 @@ def process_excel(file_path: str, element_type: str = "业务对象") -> dict:
     if not all_sheets:
         return {"error": "Excel文件为空"}
 
-    # 根据元素类型确定搜索关键词
-    type_keywords = {
-        "主题域分类": ["主题域分类", "分类名称"],
-        "主题域分组": ["主题域分组", "分组名称"],
-        "主题域": ["主题域名称", "主题域"],
-        "业务对象": ["业务对象唯一标识", "业务对象名称", "业务对象编码", "业务对象"],
-        "逻辑实体": ["逻辑实体名称", "逻辑实体唯一标识", "逻辑实体编码", "逻辑实体"],
-        "业务属性": ["属性名称", "属性唯一标识", "属性编码", "业务属性"],
-    }
-    search_keywords = type_keywords.get(element_type, ["名称", "唯一标识"])
-    # 通用关键词兜底
-    search_keywords += ["唯一标识", "对象名称", "对象名", "名称", "实体", "单据", "事物"]
-    # 去重
-    search_keywords = list(dict.fromkeys(search_keywords))
+    sheets = []
+    ai_sheet = None
+    ai_column = None
+    ai_keyword = None
 
-    best_sheet = None
-    best_col = None
-    best_values = []
-    best_keyword = None
+    # 通用关键词用于AI推荐
+    all_keywords = [
+        "业务对象唯一标识", "业务对象名称", "业务对象编码",
+        "逻辑实体名称", "逻辑实体唯一标识",
+        "属性名称", "属性唯一标识",
+        "主题域名称", "主题域分类", "主题域分组",
+        "唯一标识", "名称",
+    ]
 
-    sheets_info = []
     for sheet_name, df in all_sheets.items():
         if df.empty:
             continue
-        col_names = [str(c).strip() for c in df.columns]
-        sheets_info.append({"sheet": sheet_name, "columns": col_names, "rows": len(df)})
 
-        for kw in search_keywords:
-            for col in df.columns:
-                col_str = str(col).strip()
-                if kw in col_str:
-                    values = df[col].dropna().astype(str).str.strip().tolist()
-                    values = [v for v in values if v and v != "nan" and len(v) > 1]
-                    if values and len(values) > len(best_values):
-                        best_sheet = sheet_name
-                        best_col = col_str
-                        best_values = values
-                        best_keyword = kw
+        columns = []
+        for col in df.columns:
+            col_str = str(col).strip()
+            series = df[col].dropna()
+            values = series.astype(str).str.strip().tolist()
+            values = [v for v in values if v and v != "nan"]
+            sample = values[:5] if values else []
+
+            columns.append({
+                "name": col_str,
+                "rows": len(series),
+                "sample": sample,
+                "unique_count": len(set(values)),
+            })
+
+        sheets.append({
+            "name": sheet_name,
+            "rows": len(df),
+            "columns": columns,
+        })
+
+        # AI推荐：在所有子表中找最佳匹配列
+        for kw in all_keywords:
+            for col_info in columns:
+                if kw in col_info["name"] and col_info["rows"] > 0:
+                    if ai_column is None or len(col_info["sample"]) > 0:
+                        ai_sheet = sheet_name
+                        ai_column = col_info["name"]
+                        ai_keyword = kw
                     break
-            if best_values:
+            if ai_column and ai_keyword in all_keywords[:3]:
                 break
-        if best_keyword and best_keyword in search_keywords[:3]:
+        if ai_column and ai_keyword in all_keywords[:3]:
             break
 
-    if not best_values:
-        for sheet_name, df in all_sheets.items():
-            if df.empty:
-                continue
-            col, values = find_target_column(df)
-            if len(values) > len(best_values):
-                best_sheet = sheet_name
-                best_col = col
-                best_values = values
-
-    if not best_values:
-        return {"error": "所有子表中均未找到有效的目标列数据"}
-
-    unique_values = list(dict.fromkeys(best_values))
-    results = check_items_batch(unique_values, element_type=element_type)
-
-    bo_count = sum(1 for r in results if r.get("is_bo") is True)
-    not_bo_count = sum(1 for r in results if r.get("is_bo") is False)
-    unknown_count = sum(1 for r in results if r.get("is_bo") is None)
-
     return {
-        "total_rows": len(best_values),
-        "unique_items": len(unique_values),
-        "target_column": best_col,
-        "target_sheet": best_sheet,
-        "matched_keyword": best_keyword,
-        "element_type": element_type,
         "total_sheets": len(all_sheets),
-        "sheets_info": sheets_info,
-        "results": results,
-        "summary": {"is_bo": bo_count, "not_bo": not_bo_count, "unknown": unknown_count}
+        "sheets": sheets,
+        "ai_recommendation": {
+            "sheet": ai_sheet,
+            "column": ai_column,
+            "keyword": ai_keyword,
+        }
     }
+
+
+def extract_column_values(file_path: str, sheet_name: str, column_name: str) -> list[str]:
+    """从Excel中提取指定子表指定列的所有非空值（去重）"""
+    all_sheets = pd.read_excel(file_path, sheet_name=None)
+    df = all_sheets.get(sheet_name)
+    if df is None or df.empty:
+        return []
+
+    if column_name not in df.columns:
+        # 尝试模糊匹配
+        for col in df.columns:
+            if str(col).strip() == column_name:
+                column_name = col
+                break
+
+    series = df[column_name].dropna()
+    values = series.astype(str).str.strip().tolist()
+    values = [v for v in values if v and v != "nan" and len(v) > 1]
+    return list(dict.fromkeys(values))  # 去重保序
+
+
+def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5):
+    """
+    生成器：逐批调用LLM判断，yield SSE事件。
+    事件格式：
+      {"type":"start", "total":N, "element_type":"..."}
+      {"type":"progress", "current":5, "total":N, "batch_start":0, "batch_end":5}
+      {"type":"result", "index":0, "item":"...", "is_bo":true, "confidence":"high", "reason":"..."}
+      {"type":"done", "summary":{"is_bo":3, "not_bo":1, "unknown":1}}
+    """
+    total = len(items)
+    yield {"type": "start", "total": total, "element_type": element_type}
+
+    all_results = []
+
+    for i in range(0, total, batch_size):
+        batch = items[i:i + batch_size]
+        numbered = "\n".join(f"{j+1}. {item}" for j, item in enumerate(batch))
+
+        prompt = build_batch_prompt(element_type, numbered)
+        if not prompt:
+            for j, item in enumerate(batch):
+                result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"未知元素类型: {element_type}"}
+                all_results.append(result)
+                yield {"type": "result", "index": i + j, "item": item, "is_bo": None, "confidence": "low", "reason": result["reason"]}
+            yield {"type": "progress", "current": min(i + len(batch), total), "total": total}
+            continue
+
+        messages = [
+            {"role": "system", "content": "你是数据治理专家，严格按JSON格式输出结果。"},
+            {"role": "user", "content": prompt}
+        ]
+
+        try:
+            response = chat(messages, temperature=0.1)
+            parsed = parse_llm_response(response, batch)
+
+            for j, result in enumerate(parsed):
+                all_results.append(result)
+                yield {
+                    "type": "result",
+                    "index": i + j,
+                    "item": result.get("item", batch[j]),
+                    "is_bo": result.get("is_bo"),
+                    "confidence": result.get("confidence", "low"),
+                    "reason": result.get("reason", ""),
+                }
+        except Exception as e:
+            for j, item in enumerate(batch):
+                result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"AI分析出错: {str(e)}"}
+                all_results.append(result)
+                yield {"type": "result", "index": i + j, "item": item, "is_bo": None, "confidence": "low", "reason": result["reason"]}
+
+        yield {"type": "progress", "current": min(i + len(batch), total), "total": total}
+
+    bo_count = sum(1 for r in all_results if r.get("is_bo") is True)
+    not_bo_count = sum(1 for r in all_results if r.get("is_bo") is False)
+    unknown_count = sum(1 for r in all_results if r.get("is_bo") is None)
+
+    yield {
+        "type": "done",
+        "summary": {"is_bo": bo_count, "not_bo": not_bo_count, "unknown": unknown_count, "total": total}
+    }
+
+
+def parse_llm_response(response: str, items: list[str]) -> list[dict]:
+    """解析 LLM 返回的 JSON 结果"""
+    json_match = re.search(r'\{[\s\S]*"results"[\s\S]*\}', response)
+    if json_match:
+        try:
+            data = json.loads(json_match.group())
+            results = data.get("results", [])
+            if len(results) == len(items):
+                return results
+            elif len(results) > 0:
+                result_map = {r.get("item", ""): r for r in results}
+                return [
+                    result_map.get(item, {"item": item, "is_bo": None, "confidence": "low", "reason": "未返回该项结果"})
+                    for item in items
+                ]
+        except json.JSONDecodeError:
+            pass
+
+    return [{"item": item, "is_bo": None, "confidence": "low", "reason": "无法自动解析，请人工判断"} for item in items]
+
+
+def check_single_item(item: str, element_type: str = "业务对象") -> list[dict]:
+    """构建单个事物详细判断的消息列表"""
+    prompt = build_check_prompt(element_type)
+    return [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": f"请判断「{item}」是否是{element_type}？"}
+    ]
