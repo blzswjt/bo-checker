@@ -186,25 +186,31 @@ function rSelect(t){
   h+=`</div>`;
   const sh=t.sheets.find(s=>s.name===t.selSheet);
   if(sh){
-    h+=`<div style="font-size:12px;margin-bottom:6px"><b>点击列名添加到识别列表</b> <span style="color:#999;font-size:11px">（AI根据列名推荐元素类型）</span></div><div class="col-list">`;
+    h+=`<div style="font-size:12px;margin-bottom:6px"><b>勾选要识别的列，并选择元素类型：</b></div>`;
+    h+=`<div class="col-list" style="max-height:340px">`;
     sh.columns.forEach(c=>{
-      const used=t.pairs.some(p=>p.sheet===t.selSheet&&p.column===c.name);
+      const pair=t.pairs.find(p=>p.sheet===t.selSheet&&p.column===c.name);
+      const checked=!!pair;
       const rtype=c.recommended_type;
-      h+=`<div class="col-r${used?' sel':''}" onclick="${used?'':`addPair(${t.id},'${esc(c.name)}')`}"><div class="col-rd"></div><div class="cn">${esc(c.name)}</div><div class="cm">${c.rows}行·${c.unique_count}项</div>${rtype?`<span class="ai-b">${rtype}</span>`:''}<div class="cs">${c.sample.slice(0,3).map(esc).join(', ')}</div></div>`;
+      h+=`<div class="col-r${checked?' sel':''}" style="flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;min-width:0"><input type="checkbox" ${checked?'checked':''} onchange="toggleCol(${t.id},'${esc(c.name)}',this.checked)" style="width:16px;height:16px;flex-shrink:0"><div class="cn" style="min-width:100px">${esc(c.name)}</div><div class="cm">${c.rows}行·${c.unique_count}项</div>${rtype?`<span class="ai-b">${rtype}</span>`:''}<div class="cs" title="${c.sample.slice(0,5).map(esc).join(', ')}">${c.sample.slice(0,3).map(esc).join(', ')}</div></label>`;
+      if(checked){
+        h+=`<select style="padding:3px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px;flex-shrink:0" onchange="pairType(${t.id},${t.pairs.indexOf(pair)},this.value)">`;
+        ET.forEach(e=>{h+=`<option${e===pair.elementType?' selected':''}>${e}</option>`});
+        h+=`</select>`;
+      }
+      h+=`</div>`;
     });
     h+=`</div>`;
   }
-  // pairs
+  // summary of selected pairs
   if(t.pairs.length){
-    h+=`<div style="font-size:12px;margin:10px 0 6px"><b>已添加的识别列：</b></div>`;
-    t.pairs.forEach((p,i)=>{
-      h+=`<div class="pair"><div class="pair-hd"><span class="pair-title">📋 ${esc(p.column)}</span><button class="btn btn-o btn-s" onclick="rmPair(${t.id},${i})">移除</button></div><div style="font-size:11px;color:#666;margin-bottom:4px">识别为：</div><div class="type-sel">`;
-      ET.forEach(e=>{h+=`<button class="chip${e===p.elementType?' on':''}" onclick="pairType(${t.id},${i},'${e}')">${e}</button>`});
-      h+=`</div></div>`;
-    });
-    h+=`<div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-p" onclick="startAll(${t.id})">🚀 全部开始识别</button><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
+    h+=`<div style="margin-top:10px;padding:10px;background:#f0f7ff;border-radius:6px;font-size:12px">已选 <b>${t.pairs.length}</b> 列：`;
+    t.pairs.forEach(p=>{h+=`<span class="tag" style="margin:2px">${esc(p.column)} → ${esc(p.elementType)}</span> `});
+    h+=`</div>`;
+    h+=`<div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-p" onclick="startAll(${t.id})">🚀 开始识别</button><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
   }else{
-    h+=`<div style="margin-top:10px"><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
+    h+=`<div style="margin-top:10px;color:#999;font-size:12px">请勾选至少一列进行识别</div>`;
+    h+=`<div style="margin-top:8px"><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
   }
   return h;
 }
@@ -219,7 +225,10 @@ function rRunning(t){
     if(p.summary){const s=p.summary;h+=`<div class="stats"><div class="st st-t"><div class="n">${s.total}</div><div class="l">总计</div></div><div class="st st-y"><div class="n">${s.is_bo}</div><div class="l">✅ 是</div></div><div class="st st-n"><div class="n">${s.not_bo}</div><div class="l">❌ 不是</div></div><div class="st st-u"><div class="n">${s.unknown}</div><div class="l">⚠️ 待人工</div></div></div>`}
     if(p.results&&p.results.length){
       h+=`<div style="margin-top:6px;display:flex;gap:4px"><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'all')">全部</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},true)">✅</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},false)">❌</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'unk')">⚠️</button><button class="btn btn-o btn-s" onclick="pExport(${t.id},${pi})">📥</button></div>`;
-      h+=`<div class="tb-w" style="margin-top:6px"><table class="rt"><thead><tr><th style="width:28px"></th><th style="width:30px">#</th><th>名称</th><th style="width:60px">结论</th><th style="width:46px">置信</th><th>理由</th><th style="width:70px">操作</th></tr></thead><tbody id="tb-${t.id}-${pi}">`;
+    }
+    // 始终渲染表格结构（即使无结果），保证SSE流式追加时tbody存在
+    h+=`<div class="tb-w" style="margin-top:6px"><table class="rt"><thead><tr><th style="width:28px"></th><th style="width:30px">#</th><th>名称</th><th style="width:60px">结论</th><th style="width:46px">置信</th><th>理由</th><th style="width:70px">操作</th></tr></thead><tbody id="tb-${t.id}-${pi}">`;
+    if(p.results&&p.results.length){
       const list=p._filter?p.results.filter(r=>p._filter==='unk'?r.is_bo===null:r.is_bo===p._filter):p.results;
       list.forEach((r,ri)=>{
         const bdg=r.is_bo===true?'bdg-y':r.is_bo===false?'bdg-n':'bdg-u';
@@ -230,8 +239,8 @@ function rRunning(t){
         // hidden rules detail row
         h+=`<tr class="detail-row" style="display:none"><td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, r.rules_check)}</div></td></tr>`;
       });
-      h+=`</tbody></table></div>`;
     }
+    h+=`</tbody></table></div>`;
     h+=`</div>`;
   });
   if(t.st==='done')h+=`<button class="btn btn-o" style="margin-top:8px" onclick="tReset(${t.id})">🔄 新建任务</button>`;
@@ -272,6 +281,18 @@ function addPair(id,col){
   const c=sh?.columns.find(x=>x.name===col);
   const rtype=c?.recommended_type||t.et;
   addPairSilent(t,col,rtype);render(t);
+}
+function toggleCol(id,col,checked){
+  const t=tasks[id];
+  if(checked){
+    const sh=t.sheets.find(s=>s.name===t.selSheet);
+    const c=sh?.columns.find(x=>x.name===col);
+    const rtype=c?.recommended_type||t.et;
+    addPairSilent(t,col,rtype);
+  }else{
+    t.pairs=t.pairs.filter(p=>!(p.sheet===t.selSheet&&p.column===col));
+  }
+  render(t);
 }
 function rmPair(id,i){tasks[id].pairs.splice(i,1);render(tasks[id])}
 function pairType(id,i,t){tasks[id].pairs[i].elementType=t;render(tasks[id])}
