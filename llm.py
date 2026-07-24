@@ -27,6 +27,22 @@ MODELS = [
         "api_key": os.getenv("DOUBAO_API_KEY", ""),
     },
     {
+        "id": "deepseek-flash",
+        "name": "DeepSeek V4 Flash (快速)",
+        "provider": "ark",
+        "model": os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-v4-flash-260425"),
+        "base_url": os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+        "api_key": os.getenv("DOUBAO_API_KEY", ""),
+    },
+    {
+        "id": "deepseek-pro",
+        "name": "DeepSeek V4 Pro",
+        "provider": "ark",
+        "model": os.getenv("DEEPSEEK_PRO_MODEL", "deepseek-v4-pro-260425"),
+        "base_url": os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+        "api_key": os.getenv("DOUBAO_API_KEY", ""),
+    },
+    {
         "id": "qwen",
         "name": "通义千问 (Qwen)",
         "provider": "openai",
