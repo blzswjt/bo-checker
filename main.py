@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 
-from llm import chat_stream
+from llm import chat_stream, get_available_models, get_default_model_id
 from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text
 from checker import parse_excel_file, extract_column_values, check_items_stream, check_single_item
 import kb
@@ -34,6 +34,12 @@ async def index():
     if html_path.exists():
         return HTMLResponse(html_path.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>页面未找到</h1>")
+
+
+@app.get("/api/models")
+async def get_models():
+    """返回可用模型列表"""
+    return {"models": get_available_models(), "default": get_default_model_id()}
 
 
 @app.get("/api/element-types")
@@ -72,6 +78,7 @@ class CheckRequest(BaseModel):
     items: list[str]
     element_type: str = "业务对象"
     batch_size: int = 5
+    model_id: Optional[str] = None
 
 
 @app.post("/api/check-items")
@@ -81,7 +88,7 @@ async def check_items(req: CheckRequest):
         return JSONResponse({"error": f"不支持的元素类型: {req.element_type}"}, status_code=400)
 
     def event_stream():
-        for event in check_items_stream(req.items, req.element_type, req.batch_size):
+        for event in check_items_stream(req.items, req.element_type, req.batch_size, model_id=req.model_id):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -90,6 +97,7 @@ async def check_items(req: CheckRequest):
 class SingleCheckRequest(BaseModel):
     item: str
     element_type: str = "业务对象"
+    model_id: Optional[str] = None
 
 
 @app.post("/api/check-single")
@@ -101,7 +109,7 @@ async def check_single(req: SingleCheckRequest):
     messages = check_single_item(req.item, element_type=req.element_type)
 
     def generate():
-        for chunk in chat_stream(messages, temperature=0.2):
+        for chunk in chat_stream(messages, temperature=0.2, model_id=req.model_id):
             yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
         yield f"data: {json.dumps({'done': True})}\n\n"
 

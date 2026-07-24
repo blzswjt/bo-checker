@@ -90,11 +90,14 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 <body>
 <div class="hdr">
   <div><h1>🔍 数据建模识别智能体</h1><p>多元素并发识别 · 流式进度 · 手动纠正 · 知识库学习</p></div>
-  <div class="nav">
-    <button class="on" onclick="showPg('tasks')">📊 识别任务</button>
-    <button onclick="showPg('single')">🔎 单个分析</button>
-    <button onclick="showPg('rules')">📖 规则</button>
-    <button onclick="showPg('kb')">📚 知识库</button>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;opacity:.8">🧠 模型</span><select id="modelSel" style="padding:4px 10px;border-radius:5px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;font-size:11px;cursor:pointer;outline:none"><option>加载中...</option></select></div>
+    <div class="nav">
+      <button class="on" onclick="showPg('tasks')">📊 识别任务</button>
+      <button onclick="showPg('single')">🔎 单个分析</button>
+      <button onclick="showPg('rules')">📖 规则</button>
+      <button onclick="showPg('kb')">📚 知识库</button>
+    </div>
   </div>
 </div>
 <div class="wrap">
@@ -134,11 +137,15 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 </div>
 <script>
 let ET=[], RN={}, tid=0, tasks={}, sType='业务对象', allRules={}, kbData={};
+function getModelId(){return document.getElementById('modelSel')?.value||null}
 
 // ============ INIT ============
 async function init(){
-  const[tr,rr]=await Promise.all([fetch('/api/element-types').then(r=>r.json()),fetch('/api/rules').then(r=>r.json())]);
+  const[tr,rr,mr]=await Promise.all([fetch('/api/element-types').then(r=>r.json()),fetch('/api/rules').then(r=>r.json()),fetch('/api/models').then(r=>r.json())]);
   ET=tr.types||[];RN=tr.rule_names||{};sType=ET[0]||'';allRules=rr.rules||{};
+  // 模型选择器
+  const ms=document.getElementById('modelSel');ms.innerHTML='';
+  (mr.models||[]).forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;if(m.id===mr.default)o.selected=true;ms.appendChild(o)});
   // single type
   const sr=document.getElementById('sTypeRow');
   ET.forEach(t=>{const c=document.createElement('button');c.className='chip'+(t===sType?' on':'');c.textContent=t;c.onclick=()=>{sr.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));c.classList.add('on');sType=t};sr.appendChild(c)});
@@ -311,7 +318,7 @@ async function startAll(id){
     updatePairUI(t,pi);
     // SSE
     try{
-      const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:5})});
+      const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:5,model_id:getModelId()})});
       const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
       while(true){
         const{done,value}=await reader.read();if(done)break;
@@ -396,7 +403,7 @@ async function doSingle(){
   const btn=document.getElementById('sBtn');btn.disabled=true;btn.textContent='分析中...';
   const div=document.getElementById('sRes');div.style.display='block';div.innerHTML='<span style="color:#999">分析中...</span>';
   try{
-    const res=await fetch('/api/check-single',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item,element_type:sType})});
+    const res=await fetch('/api/check-single',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item,element_type:sType,model_id:getModelId()})});
     const reader=res.body.getReader();const dec=new TextDecoder();let full='';div.innerHTML='';
     while(true){const{done,value}=await reader.read();if(done)break;const txt=dec.decode(value,{stream:true});for(const l of txt.split('\n')){if(!l.startsWith('data: '))continue;try{const d=JSON.parse(l.slice(6));if(d.content){full+=d.content;div.innerHTML=renderMd(full)}}catch(e){}}}
   }catch(e){div.innerHTML=`<span style="color:red">失败: ${e.message}</span>`}

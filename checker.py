@@ -168,7 +168,7 @@ def extract_column_values(file_path: str, sheet_name: str, column_name: str) -> 
     return list(dict.fromkeys(values))  # 去重保序
 
 
-def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5):
+def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5, model_id: str = None):
     """
     生成器：逐批调用LLM判断，yield SSE事件。
     集成知识库示例，结果包含逐条规则分析(rules_check)。
@@ -200,7 +200,7 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
         ]
 
         try:
-            response = chat(messages, temperature=0.1)
+            response = chat(messages, temperature=0.1, model_id=model_id)
             parsed = parse_llm_response(response, batch)
 
             for j, result in enumerate(parsed):
