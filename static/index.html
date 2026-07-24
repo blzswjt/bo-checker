@@ -484,6 +484,9 @@ async function startAll(id){
               }
               p._thinkBatchSpan=null;
             }
+            else if(ev.type==='rule_check'){
+              updateSingleMatrixCell(t,pi,ev);
+            }
             else if(ev.type==='progress'){
               const el=document.getElementById(`pf-${t.id}-${pi}`);
               if(el){const pct=ev.total>0?Math.round(ev.current/ev.total*100):0;el.style.width=pct+'%'}
@@ -796,7 +799,49 @@ function initMatrixResize(container){
   });
 }
 
-// 矩阵视图流式追加：思考完一个结论立即在矩阵中出现一行
+// 矩阵视图：逐条规则实时更新单个单元格
+function updateSingleMatrixCell(t,pi,ev){
+  const tbl=document.getElementById('mxtbl-'+t.id+'-'+pi);
+  if(!tbl)return;
+  const tbody=tbl.querySelector('tbody');
+  if(!tbody)return;
+  const p=t.pairs[pi];
+  const allR=RN[p.elementType]||[];
+  if(!allR.length)return;
+  const ri=ev.item_index;
+  const rowId='mxrow-'+t.id+'-'+pi+'-'+ri;
+  let tr=document.getElementById(rowId);
+  // 如果行不存在，创建一行（初始全?）
+  if(!tr){
+    tr=document.createElement('tr');
+    tr.id=rowId;
+    tr.dataset.itemIdx=ri;
+    tr.className='new';
+    let cells=`<td><b>${esc(ev.item_name)}</b></td>`;
+    allR.forEach(rn=>{
+      const key=t.id+'_'+pi+'_'+ri+'_'+rn;
+      _cellData[key]={item:ev.item_name,rule:rn,pass:null,reason:'等待分析...'};
+      cells+=`<td><span class="mx-c mx-unk" onclick="showCellDetail('${key}')" title="${esc(rn)}">?</span></td>`;
+    });
+    tr.innerHTML=cells;
+    const ph=tbody.querySelector('td[colspan]');
+    if(ph)ph.parentElement.remove();
+    tbody.appendChild(tr);
+    tr.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+  // 更新对应规则的单元格
+  const ruleColIdx=allR.findIndex(rn=>rn===ev.rule||ev.rule.includes(rn)||rn.includes(ev.rule));
+  if(ruleColIdx<0)return;
+  const td=tr.children[ruleColIdx+1];
+  if(!td)return;
+  const key=t.id+'_'+pi+'_'+ri+'_'+allR[ruleColIdx];
+  _cellData[key]={item:ev.item_name,rule:allR[ruleColIdx],pass:ev.pass,reason:ev.reason||''};
+  const cls=ev.pass?'mx-pass':'mx-fail';
+  const icon=ev.pass?'✓':'✗';
+  td.innerHTML=`<span class="mx-c ${cls}" onclick="showCellDetail('${key}')" title="${esc(allR[ruleColIdx])}">${icon}</span>`;
+}
+
+// 矩阵视图流式追加：结论出来后，复用已有行或新建
 function appendMatrixRow(t,pi,ev){
   const tbl=document.getElementById('mxtbl-'+t.id+'-'+pi);
   if(!tbl)return;
@@ -807,8 +852,18 @@ function appendMatrixRow(t,pi,ev){
   const allR=RN[p.elementType]||[];
   const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
   const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
+  // 检查是否已有rule_check创建的行
+  const existingRow=tbody.querySelector(`tr[data-item-idx="${ri}"]`);
+  if(existingRow){
+    existingRow.id='mxrow-'+t.id+'-'+pi+'-'+ri;
+    const firstTd=existingRow.children[0];
+    if(firstTd)firstTd.innerHTML=`<b>${esc(ev.item)}</b> <span class="bdg ${bdg}" style="font-size:9px">${btxt}</span>`;
+    return;
+  }
+  // 行不存在，新建
   const tr=document.createElement('tr');
   tr.id='mxrow-'+t.id+'-'+pi+'-'+ri;
+  tr.dataset.itemIdx=ri;
   tr.className='new';
   let cells=`<td><b>${esc(ev.item)}</b> <span class="bdg ${bdg}" style="font-size:9px">${btxt}</span></td>`;
   allR.forEach(rn=>{
@@ -832,7 +887,9 @@ function appendMatrixRow(t,pi,ev){
 
 // 矩阵视图单元格更新：JSON到达后更新某行的✓✗状态
 function updateMatrixCells(t,pi,ri,ev){
-  const tr=document.getElementById('mxrow-'+t.id+'-'+pi+'-'+ri);
+  const tbl=document.getElementById('mxtbl-'+t.id+'-'+pi);
+  let tr=tbl?tbl.querySelector(`tr[data-item-idx="${ri}"]`):null;
+  if(!tr)tr=document.getElementById('mxrow-'+t.id+'-'+pi+'-'+ri);
   if(!tr)return;
   const p=t.pairs[pi];
   const allR=RN[p.elementType]||[];

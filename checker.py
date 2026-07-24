@@ -205,6 +205,53 @@ def _parse_streaming_conclusions(text: str, batch: list[str]):
     return results
 
 
+# 正则：检测规则判断行  ✓ 【规则名】理由  或  ✗ 【规则名】理由
+_RULE_CHECK_RE = re.compile(r'[✓✗]\s*【(.+?)】\s*(.*)')
+# 正则：检测事物标题
+_ITEM_HEADER_RE = re.compile(r'(?:#+\s*)?(?:\*+)?\s*(\d+)[.\uff0e]\s*(.+?)(?:\*+)?$')
+
+
+def _detect_streaming_rule_checks(text: str, batch: list[str], last_pos: int, emitted: dict):
+    """从流式文本中实时检测规则判断行，返回新检测到的规则检查列表
+    emitted: {item_idx: set(rule_names)} 已发射的规则集合，会就地更新
+    简单可靠方案：每次扫描全文，通过emitted去重，性能开销可忽略
+    """
+    new_checks = []
+    current_item_idx = -1
+
+    for line in text.split('\n'):
+        line_s = line.strip()
+
+        # 检测事物标题
+        m = _ITEM_HEADER_RE.match(line_s)
+        if m:
+            num = int(m.group(1))
+            if 1 <= num <= len(batch):
+                current_item_idx = num - 1
+            continue
+
+        # 检测规则判断行
+        if current_item_idx >= 0:
+            m = _RULE_CHECK_RE.search(line_s)
+            if m:
+                rule_name = m.group(1).strip()
+                reason = m.group(2).strip()
+                pass_check = '✓' in line_s[:line_s.find('【')]
+                if current_item_idx not in emitted:
+                    emitted[current_item_idx] = set()
+                if rule_name not in emitted[current_item_idx]:
+                    emitted[current_item_idx].add(rule_name)
+                    new_checks.append({
+                        'item_idx': current_item_idx,
+                        'item_name': batch[current_item_idx],
+                        'rule': rule_name,
+                        'pass': pass_check,
+                        'reason': reason[:100],
+                    })
+
+    return new_checks
+
+
 def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5, model_id: str = None):
     """
     生成器：逐批调用LLM判断，yield SSE事件。
@@ -246,6 +293,8 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
             json_started = False
             emitted_indices = set()  # 已经通过思考解析发射的结果索引
             _last_parse_len = 0  # 上次解析到的位置，避免重复解析
+            _rule_check_emitted = {}  # {item_idx: set(rule_names)} 已发射的规则检查
+            _rule_check_last_pos = 0  # 规则检查解析位置
 
             for token in chat_stream(messages, temperature=0.1, model_id=model_id):
                 full_response += token
@@ -255,6 +304,24 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                         json_started = True
                     else:
                         yield {"type": "thinking", "batch_index": batch_idx, "token": token}
+
+                    # 实时检测规则判断行，立即发射逐条规则更新
+                    if '\n' in full_response[_rule_check_last_pos:]:
+                        _rule_check_last_pos = len(full_response)
+                        checks = _detect_streaming_rule_checks(
+                            full_response, batch, max(0, _rule_check_last_pos - 2000),
+                            _rule_check_emitted
+                        )
+                        for ck in checks:
+                            yield {
+                                "type": "rule_check",
+                                "batch_index": batch_idx,
+                                "item_index": i + ck['item_idx'],
+                                "item_name": ck['item_name'],
+                                "rule": ck['rule'],
+                                "pass": ck['pass'],
+                                "reason": ck['reason'],
+                            }
 
                     # 实时检测已完成的结论，立即发射结果
                     # 优化：只在有新完整行时才重新解析，避免O(n²)重解析
