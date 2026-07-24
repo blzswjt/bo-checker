@@ -168,10 +168,44 @@ def extract_column_values(file_path: str, sheet_name: str, column_name: str) -> 
     return list(dict.fromkeys(values))  # 去重保序
 
 
+def _parse_streaming_conclusions(text: str, batch: list[str]):
+    """从思考文本中实时提取已完成的结论，返回 (item_index, result_dict) 列表"""
+    results = []
+    for line in text.split('\n'):
+        line_s = line.strip()
+        # 检测新事物开始: **1. 事物名** 或 **1. 事物名**
+        m = re.match(r'\*\*(\d+)[.\uff0e]\s*(.+?)\*\*', line_s)
+        if m:
+            num = int(m.group(1))
+            if 1 <= num <= len(batch):
+                results.append({'idx': num - 1, 'name': m.group(2).strip(), 'conclusion': None})
+            continue
+        # 检测结论行: - 结论：是/不是/待人工
+        m = re.match(r'[-\-]\s*结论[：:]\s*(.*)', line_s)
+        if m and results and results[-1]['conclusion'] is None:
+            conclusion_text = m.group(1).strip()
+            if '是' in conclusion_text and '不是' not in conclusion_text and '否' not in conclusion_text:
+                is_bo = True
+                confidence = 'high'
+            elif '不是' in conclusion_text or '否' in conclusion_text:
+                is_bo = False
+                confidence = 'high'
+            else:
+                is_bo = None
+                confidence = 'medium'
+            results[-1]['conclusion'] = {
+                'is_bo': is_bo,
+                'confidence': confidence,
+                'reason': conclusion_text[:80],
+            }
+    return results
+
+
 def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5, model_id: str = None):
     """
     生成器：逐批调用LLM判断，yield SSE事件。
     集成知识库示例，结果包含逐条规则分析(rules_check)。
+    支持实时逐条输出：思考完一个事物的结论后立即显示结果。
     """
     total = len(items)
     model_name = get_model_display_name(model_id)
@@ -201,43 +235,70 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
         ]
 
         try:
-            # 流式调用：实时推送思考过程
+            # 流式调用：实时推送思考过程 + 实时逐条检测结果
             batch_idx = i // batch_size
             yield {"type": "thinking_start", "batch_index": batch_idx}
             full_response = ""
             json_started = False
+            emitted_indices = set()  # 已经通过思考解析发射的结果索引
+
             for token in chat_stream(messages, temperature=0.1, model_id=model_id):
                 full_response += token
                 # 检测JSON块开始，停止推送思考token
                 if not json_started:
                     if '```json' in full_response or (full_response.count('{') > 0 and '"results"' in full_response):
                         json_started = True
-                        # 去掉已累积的JSON前缀
-                        clean = full_response.split('```json')[0] if '```json' in full_response else full_response[:full_response.rfind('{')]
-                        # 不回溯已发送的token，只标记后续不再发
                     else:
                         yield {"type": "thinking", "batch_index": batch_idx, "token": token}
+
+                    # 实时检测已完成的结论，立即发射结果
+                    conclusions = _parse_streaming_conclusions(full_response, batch)
+                    for c in conclusions:
+                        if c['conclusion'] and c['idx'] not in emitted_indices:
+                            emitted_indices.add(c['idx'])
+                            con = c['conclusion']
+                            item_name = batch[c['idx']]
+                            result = {
+                                "item": item_name,
+                                "is_bo": con['is_bo'],
+                                "confidence": con['confidence'],
+                                "reason": con['reason'],
+                                "rules_check": [],
+                            }
+                            all_results.append(result)
+                            yield {"type": "result", "index": i + c['idx'], **result}
+
             yield {"type": "thinking_end", "batch_index": batch_idx}
 
-            # 解析完整响应
+            # 解析完整JSON响应，补充未通过思考检测到的结果（含rules_check详情）
             parsed = parse_llm_response(full_response, batch)
+            # 建立已发射结果映射
+            emitted_map = {}
+            for ar in all_results:
+                emitted_map[ar.get('item', '')] = True
 
             for j, result in enumerate(parsed):
-                all_results.append(result)
-                yield {
-                    "type": "result",
-                    "index": i + j,
-                    "item": result.get("item", batch[j]),
-                    "is_bo": result.get("is_bo"),
-                    "confidence": result.get("confidence", "low"),
-                    "reason": result.get("reason", ""),
-                    "rules_check": result.get("rules_check", []),
-                }
+                item_name = result.get("item", batch[j])
+                if item_name not in emitted_map:
+                    # 这个结果还没发射，立即发射（含rules_check）
+                    all_results.append(result)
+                    yield {
+                        "type": "result",
+                        "index": i + j,
+                        "item": item_name,
+                        "is_bo": result.get("is_bo"),
+                        "confidence": result.get("confidence", "low"),
+                        "reason": result.get("reason", ""),
+                        "rules_check": result.get("rules_check", []),
+                    }
+                # 如果已经通过思考发射过了，跳过（JSON结果中的rules_check会在后续更新）
+
         except Exception as e:
             for j, item in enumerate(batch):
-                result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"AI分析出错: {str(e)}", "rules_check": []}
-                all_results.append(result)
-                yield {"type": "result", "index": i + j, **result}
+                if j not in emitted_indices:
+                    result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"AI分析出错: {str(e)}", "rules_check": []}
+                    all_results.append(result)
+                    yield {"type": "result", "index": i + j, **result}
 
         yield {"type": "progress", "current": min(i + len(batch), total), "total": total}
 
