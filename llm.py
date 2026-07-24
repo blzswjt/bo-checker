@@ -11,8 +11,16 @@ load_dotenv(Path(__file__).parent / ".env")
 # 模型配置列表
 MODELS = [
     {
+        "id": "doubao-turbo",
+        "name": "豆包 Turbo (快速)",
+        "provider": "ark",
+        "model": os.getenv("DOUBAO_TURBO_MODEL", "Doubao-Seed-2.1-turbo"),
+        "base_url": os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+        "api_key": os.getenv("DOUBAO_API_KEY", ""),
+    },
+    {
         "id": "doubao",
-        "name": "豆包 (Doubao)",
+        "name": "豆包 Evolving (推理)",
         "provider": "ark",
         "model": os.getenv("DOUBAO_MODEL", "doubao-seed-evolving"),
         "base_url": os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
@@ -30,7 +38,7 @@ MODELS = [
 
 # 缓存客户端
 _clients = {}
-_default_model_id = os.getenv("DEFAULT_MODEL", "doubao")
+_default_model_id = os.getenv("DEFAULT_MODEL", "doubao-turbo")
 
 
 def get_available_models() -> list[dict]:
@@ -89,8 +97,8 @@ def _get_client(model_id: str):
     return _clients[model_id]
 
 
-def chat(messages: list[dict], temperature: float = 0.3, model_id: str = None) -> str:
-    """同步调用 LLM，返回完整文本"""
+def chat(messages: list[dict], temperature: float = 0.3, model_id: str = None, timeout: int = 90) -> str:
+    """同步调用 LLM，返回完整文本。超时默认90秒"""
     mid = model_id or _default_model_id
     cfg = _get_model_config(mid)
     client = _get_client(mid)
@@ -98,6 +106,7 @@ def chat(messages: list[dict], temperature: float = 0.3, model_id: str = None) -
         model=cfg["model"],
         messages=messages,
         temperature=temperature,
+        timeout=timeout,
     )
     return response.choices[0].message.content
 
