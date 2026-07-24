@@ -292,6 +292,8 @@ function renderSidebar(){
 function selectTask(id){
   activeTaskId=id;
   renderSidebar();
+  // 重建DOM前失效span引用
+  if(tasks[id]&&tasks[id].pairs)tasks[id].pairs.forEach(p=>{p._thinkBatchSpan=null});
   render(tasks[id]);
   showPg('tasks');
 }
@@ -499,12 +501,15 @@ async function startAll(id){
             }
             else if(ev.type==='thinking'){
               p.thinkingText+=ev.token;
-              if(p._thinkBatchSpan){
+              // 检查span是否仍在DOM中（render重建后会失效）
+              const spanValid=p._thinkBatchSpan&&p._thinkBatchSpan.parentElement;
+              if(spanValid){
                 p._thinkBatchSpan.appendChild(document.createTextNode(ev.token));
                 const ct=getThinkCt(t,pi);
                 if(ct)ct.scrollTop=ct.scrollHeight;
               } else {
-                // span不存在（可能被render重建），强制显示思考内容
+                // span不存在或已脱离DOM，强制显示思考内容
+                p._thinkBatchSpan=null;
                 const ct=getThinkCt(t,pi);
                 if(ct){
                   if(ct.innerHTML.includes('等待AI思考')||!ct.innerHTML.trim())ct.innerHTML='';
@@ -611,6 +616,12 @@ function updateResultRow(t,pi,ev){
   let ri=-1;
   for(let k=0;k<p.results.length;k++){if(p.results[k].item===ev.item){ri=k;break}}
   if(ri<0)return;
+  // 关键：如果ev.is_bo为null但已有有效值，保留已有结论（JSON解析失败时不应覆盖流式解析结果）
+  if(ev.is_bo===null&&p.results[ri].is_bo!==null){
+    // 只更新rules_check
+    if(ev.rules_check&&ev.rules_check.length)p.results[ri].rules_check=ev.rules_check;
+    return;
+  }
   // 更新存储的数据
   p.results[ri].is_bo=ev.is_bo;
   p.results[ri].confidence=ev.confidence;
@@ -650,6 +661,7 @@ function toggleDetail(btn){
 function pFilter(id,pi,type){
   const t=tasks[id];const p=t.pairs[pi];
   p._filter=type==='all'?null:type==='unk'?'unk':type;
+  t.pairs.forEach(p=>{p._thinkBatchSpan=null});
   render(t);
 }
 function pExport(id,pi){
@@ -736,6 +748,8 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 function switchView(mode){
   viewMode=mode;
   if(activeTaskId&&tasks[activeTaskId]&&(tasks[activeTaskId].st==='running'||tasks[activeTaskId].st==='done')){
+    // 重建DOM前，失效所有thinkingBatchSpan引用（render会重建DOM，旧span会脱离DOM树）
+    tasks[activeTaskId].pairs.forEach(p=>{p._thinkBatchSpan=null});
     render(tasks[activeTaskId]);
   }
 }
@@ -1041,10 +1055,17 @@ function updateMatrixCells(t,pi,ri,ev){
   if(!tr)return;
   const p=t.pairs[pi];
   const allR=RN[p.elementType]||[];
-  const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
-  const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
-  const firstTd=tr.children[0];
-  if(firstTd)firstTd.innerHTML=`<b>${esc(ev.item)}</b> <span class="bdg ${bdg}" style="font-size:9px">${btxt}</span>`;
+  // 关键：如果ev.is_bo为null且rules_check为空，不覆盖已有的✓✗
+  const hasRules=ev.rules_check&&ev.rules_check.length>0;
+  if(ev.is_bo===null&&!hasRules)return;
+  // 更新结论标记
+  if(ev.is_bo!==null){
+    const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
+    const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
+    const firstTd=tr.children[0];
+    if(firstTd)firstTd.innerHTML=`<b>${esc(ev.item)}</b> <span class="bdg ${bdg}" style="font-size:9px">${btxt}</span>`;
+  }
+  if(!hasRules)return;
   allR.forEach((rn,ci)=>{
     const td=tr.children[ci+1];
     if(!td)return;
@@ -1055,8 +1076,12 @@ function updateMatrixCells(t,pi,ri,ev){
       const cls=rc.pass?'mx-pass':'mx-fail';
       td.innerHTML=`<span class="mx-c ${cls}" onclick="showCellDetail('${key}')" title="${esc(rn)}">${rc.pass?'✓':'✗'}</span>`;
     }else{
-      _cellData[key]={item:ev.item,rule:rn,pass:null,reason:'AI未返回该条分析',elementType:p.elementType};
-      td.innerHTML=`<span class="mx-c mx-unk" onclick="showCellDetail('${key}')" title="${esc(rn)}">?</span>`;
+      // 只在单元格还是?时才更新（不覆盖已有的✓✗）
+      const existing=td.querySelector('.mx-c');
+      if(!existing||existing.classList.contains('mx-unk')){
+        _cellData[key]={item:ev.item,rule:rn,pass:null,reason:'AI未返回该条分析',elementType:p.elementType};
+        td.innerHTML=`<span class="mx-c mx-unk" onclick="showCellDetail('${key}')" title="${esc(rn)}">?</span>`;
+      }
     }
   });
   tr.classList.add('new');

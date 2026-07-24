@@ -179,10 +179,15 @@ def _parse_streaming_conclusions(text: str, batch: list[str]):
         # 检测新事物开始: 支持多种格式
         # - **1. 事物名** / 1. 事物名 / ### 1. 事物名 / #### 1. 事物名
         # - **### 1. 事物名** / #### 1. 事物名（含####） 等混合格式
+        # 排除section标题（如 ## JSON结果 → "1. 结果"）
+        if re.match(r'^#+\s+(?!\d)', line_s):
+            continue
         m = re.match(r'(?:#+\s*)?(?:\*+\s*)?(\d+)[.\uff0e\u3001]\s*(.+?)(?:\s*\*+)?$', line_s)
         if m:
             num = int(m.group(1))
             name = m.group(2).strip().rstrip('*').strip()
+            if name in _SECTION_WORDS or len(name) <= 1:
+                continue
             if 1 <= num <= len(batch):
                 results.append({'idx': num - 1, 'name': name, 'conclusion': None})
             continue
@@ -211,7 +216,9 @@ def _parse_streaming_conclusions(text: str, batch: list[str]):
 # 正则：检测规则判断行  ✓ 【规则名】理由  或  ✗ 【规则名】理由
 _RULE_CHECK_RE = re.compile(r'[✓✗]\s*【(.+?)】\s*(.*)')
 # 正则：检测事物标题 - 支持 #, **, 数字+点/顿号 等各种格式
+# 额外要求：标题后面不能紧跟常见section标记词（如"结果"、"输出"、"分析"等）
 _ITEM_HEADER_RE = re.compile(r'(?:#+\s*)?(?:\*+\s*)?(\d+)[.\uff0e\u3001]\s*(.+?)(?:\s*\*+)?$')
+_SECTION_WORDS = {'结果', '输出', '分析', '思考', '说明', '总结', '概述', '判断', '识别', '命名', '定义'}
 
 
 def _detect_streaming_rule_checks(text: str, batch: list[str], last_pos: int, emitted: dict):
@@ -225,10 +232,19 @@ def _detect_streaming_rule_checks(text: str, batch: list[str], last_pos: int, em
     for line in text.split('\n'):
         line_s = line.strip()
 
+        # 跳过明显是section标题的行（## JSON结果、## 自然语言分析 等）
+        # 但保留 ### 1. xxx（数字开头的不跳过）
+        if re.match(r'^#+\s+(?!\d)', line_s):
+            continue
+
         # 检测事物标题
         m = _ITEM_HEADER_RE.match(line_s)
         if m:
             num = int(m.group(1))
+            name = m.group(2).strip().rstrip('*').strip()
+            # 排除section标题误匹配（如 "1. 结果" "1. 输出"）
+            if name in _SECTION_WORDS or len(name) <= 1:
+                continue
             if 1 <= num <= len(batch):
                 current_item_idx = num - 1
             continue
@@ -303,7 +319,7 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                 full_response += token
                 # 检测JSON块开始，停止推送思考token
                 if not json_started:
-                    if '```json' in full_response or (full_response.count('{') > 0 and '"results"' in full_response):
+                    if '```json' in full_response or '`{' in full_response or (full_response.count('{') > 0 and '"results"' in full_response):
                         json_started = True
                     else:
                         yield {"type": "thinking", "batch_index": batch_idx, "token": token}
@@ -362,13 +378,29 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                     "rules_check": result.get("rules_check", []),
                 }
                 if j in emitted_indices:
-                    # 已通过思考发射过，发送更新事件补充rules_check
-                    # 更新all_results中的记录
-                    for ar in all_results:
-                        if ar.get('item') == item_name:
-                            ar.update(full_result)
-                            break
-                    yield {"type": "result_update", "index": i + j, **full_result}
+                    # 已通过思考发射过
+                    # 关键：如果JSON解析失败(is_bo=None)，保留流式解析的结论
+                    if full_result['is_bo'] is None:
+                        for ar in all_results:
+                            if ar.get('item') == item_name and ar.get('is_bo') is not None:
+                                # 流式解析已有结论，只更新rules_check
+                                if full_result.get('rules_check'):
+                                    ar['rules_check'] = full_result['rules_check']
+                                break
+                        else:
+                            # 流式也没有，发送更新
+                            for ar in all_results:
+                                if ar.get('item') == item_name:
+                                    ar.update(full_result)
+                                    break
+                            yield {"type": "result_update", "index": i + j, **full_result}
+                    else:
+                        # JSON有有效结论，发送更新
+                        for ar in all_results:
+                            if ar.get('item') == item_name:
+                                ar.update(full_result)
+                                break
+                        yield {"type": "result_update", "index": i + j, **full_result}
                 else:
                     # 未发射过，正常发射
                     all_results.append(full_result)
