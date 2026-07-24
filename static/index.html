@@ -124,6 +124,35 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .kb-item .nm{font-weight:600}.kb-item .mt{font-size:10px}
 .kb-item .mt-y{color:#2e7d32}.kb-item .mt-n{color:#c62828}
 .empty{text-align:center;color:#bbb;padding:50px 0;font-size:13px}
+/* View toggle */
+.view-toggle{display:inline-flex;gap:2px;background:#f0f0f0;border-radius:6px;padding:2px}
+.view-toggle button{padding:3px 10px;border:none;border-radius:5px;cursor:pointer;font-size:10px;background:transparent;color:#888;transition:.2s}
+.view-toggle button.on{background:#1a73e8;color:#fff;font-weight:600}
+/* Matrix view */
+.mx-wrap{overflow-x:auto;border:1px solid #e0e0e0;border-radius:8px;margin-top:8px;background:#fff}
+.mx-table{border-collapse:collapse;font-size:11px;min-width:100%}
+.mx-table th{background:#f8f9fa;padding:5px 6px;font-weight:600;border-bottom:2px solid #e0e0e0;white-space:nowrap;text-align:center;font-size:10px;position:sticky;top:0;z-index:1}
+.mx-table th:first-child{text-align:left;position:sticky;left:0;z-index:2;background:#f8f9fa;min-width:120px}
+.mx-table td{padding:5px 6px;border-bottom:1px solid #f0f0f0;text-align:center;white-space:nowrap}
+.mx-table td:first-child{text-align:left;font-weight:600;position:sticky;left:0;background:#fff;z-index:1;min-width:120px;border-right:2px solid #e8e8e8}
+.mx-table tr:hover td{background:#f8faff}
+.mx-table tr:hover td:first-child{background:#f0f4ff}
+.mx-c{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:700;transition:.15s}
+.mx-c:hover{transform:scale(1.2);box-shadow:0 2px 6px rgba(0,0,0,.15)}
+.mx-pass{background:#e8f5e9;color:#2e7d32}
+.mx-fail{background:#fce4ec;color:#c62828}
+.mx-unk{background:#f5f5f5;color:#bbb}
+/* Cell detail modal */
+.cell-modal-bg{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.3);z-index:999;display:flex;align-items:center;justify-content:center}
+.cell-modal{background:#fff;border-radius:12px;padding:20px 24px;max-width:480px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,.15);font-size:13px;line-height:1.8}
+.cell-modal h4{font-size:14px;margin-bottom:8px;color:#1a73e8}
+.cell-modal .cm-pass{display:inline-block;padding:2px 10px;border-radius:5px;background:#e8f5e9;color:#2e7d32;font-weight:600;font-size:12px}
+.cell-modal .cm-fail{display:inline-block;padding:2px 10px;border-radius:5px;background:#fce4ec;color:#c62828;font-weight:600;font-size:12px}
+.cell-modal .cm-unk{display:inline-block;padding:2px 10px;border-radius:5px;background:#f5f5f5;color:#999;font-weight:600;font-size:12px}
+.cell-modal .cm-close{margin-top:14px;display:block;width:100%;padding:8px;border:none;border-radius:7px;background:#f5f5f5;cursor:pointer;font-size:12px;color:#666}
+.cell-modal .cm-close:hover{background:#e8e8e8}
+/* Rule category header in matrix */
+.mx-cat{background:#e8f0fe !important;color:#1a73e8;font-weight:700 !important;font-size:9px !important;text-transform:uppercase;letter-spacing:.5px}
 </style>
 </head>
 <body>
@@ -194,7 +223,7 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
   </div>
 </div>
 <script>
-let ET=[], RN={}, tid=0, tasks={}, activeTaskId=null, sType='业务对象', allRules={}, kbData={};
+let ET=[], RN={}, tid=0, tasks={}, activeTaskId=null, sType='业务对象', allRules={}, kbData={}, viewMode='list', _cellData={};
 function getModelId(){return document.getElementById('modelSel')?.value||null}
 
 // ============ INIT ============
@@ -317,6 +346,11 @@ function rRunning(t){
     h+=`<div class="pair" id="pair-${t.id}-${pi}"><div class="pair-hd"><span class="pair-title">📋 ${esc(p.column)} → ${esc(p.elementType)}</span><div style="display:flex;align-items:center;gap:6px">${p.modelName?`<span style="font-size:10px;padding:2px 8px;background:#e3f2fd;color:#1565c0;border-radius:4px">🧠 ${esc(p.modelName)}</span>`:''}<span class="bdg ${p.status==='done'?'bdg-y':'bdg-u'}" style="font-size:10px">${p.status==='done'?'完成':p.status==='running'?`${done}/${total}`:'等待'}</span></div></div>`;
     h+=`<div class="prog-t"><div class="prog-f" id="pf-${t.id}-${pi}" style="width:${pct}%"></div></div><div class="prog-txt"><span>${done<total?'⏳ 分析中...':'✅ 完成'}</span><span>${pct}%</span></div>`;
     if(p.summary){const s=p.summary;h+=`<div class="stats"><div class="st st-t"><div class="n">${s.total}</div><div class="l">总计</div></div><div class="st st-y"><div class="n">${s.is_bo}</div><div class="l">✅ 是</div></div><div class="st st-n"><div class="n">${s.not_bo}</div><div class="l">❌ 不是</div></div><div class="st st-u"><div class="n">${s.unknown}</div><div class="l">⚠️ 待人工</div></div></div>`}
+    // View toggle buttons
+    h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0"><div class="view-toggle"><button class="${viewMode==='list'?'on':''}" onclick="switchView('list')">☰ 列表视图</button><button class="${viewMode==='matrix'?'on':''}" onclick="switchView('matrix')">▦ 规则矩阵</button></div></div>`;
+    if(viewMode==='matrix'){
+      h+=renderMatrixView(t,pi);
+    } else {
     if(p.results&&p.results.length){
       h+=`<div style="margin-top:6px;display:flex;gap:4px"><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'all')">全部</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},true)">✅</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},false)">❌</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'unk')">⚠️</button><button class="btn btn-o btn-s" onclick="pExport(${t.id},${pi})">📥</button></div>`;
     }
@@ -333,6 +367,7 @@ function rRunning(t){
       });
     }
     h+=`</tbody></table></div>`;
+    } // end list view
     // 思考过程区域 - 显示存储的思考文本
     const thinkText = p.thinkingText || '';
     const thinkStatus = p.thinkingDone ? '✅ 思考完成' : (p.status==='running' ? '思考中...' : '');
@@ -630,6 +665,85 @@ async function delKB(type,item){
 
 // ============ UTILS ============
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+
+// ============ VIEW TOGGLE & MATRIX ============
+function switchView(mode){
+  viewMode=mode;
+  if(activeTaskId&&tasks[activeTaskId]&&(tasks[activeTaskId].st==='running'||tasks[activeTaskId].st==='done')){
+    render(tasks[activeTaskId]);
+  }
+}
+
+function renderMatrixView(t,pi){
+  const p=t.pairs[pi];
+  const allR=RN[p.elementType]||[];
+  const rules=ELEMENT_RULES_DATA(p.elementType);
+  if(!allR.length){
+    if(p.results&&p.results.length){
+      return `<div class="mx-wrap"><table class="mx-table"><thead><tr><th>名称</th><th>结论</th><th>置信</th><th>理由</th></tr></thead><tbody>${p.results.map(r=>{
+        const bdg=r.is_bo===true?'bdg-y':r.is_bo===false?'bdg-n':'bdg-u';
+        const btxt=r.is_bo===true?'✅ 是':r.is_bo===false?'❌ 不是':'⚠️ 待定';
+        return `<tr><td>${esc(r.item)}</td><td><span class="bdg ${bdg}">${btxt}</span></td><td>${esc(r.confidence||'')}</td><td>${esc(r.reason||'')}</td></tr>`;
+      }).join('')}</tbody></table></div>`;
+    }
+    return '<div style="color:#999;font-size:12px;padding:10px">暂无规则分析数据</div>';
+  }
+  // Build matrix table
+  let h='<div class="mx-wrap"><table class="mx-table"><thead><tr><th>名称</th>';
+  allR.forEach(rn=>{h+=`<th title="${esc(rn)}">${esc(rn.length>4?rn.slice(0,4)+'..':rn)}</th>`});
+  h+='</tr></thead><tbody>';
+  if(p.results&&p.results.length){
+    p.results.forEach((r,ri)=>{
+      const bdg=r.is_bo===true?'bdg-y':r.is_bo===false?'bdg-n':'bdg-u';
+      const btxt=r.is_bo===true?'✅ 是':r.is_bo===false?'❌ 不是':'⚠️ 待定';
+      h+=`<tr><td><b>${esc(r.item)}</b> <span class="bdg ${bdg}" style="font-size:9px">${btxt}</span></td>`;
+      allR.forEach(rn=>{
+        const rc=findRuleCheck(r.rules_check,rn);
+        const key=`${t.id}_${pi}_${ri}_${rn}`;
+        if(rc){
+          _cellData[key]={item:r.item,rule:rn,pass:rc.pass,reason:rc.reason||''};
+          const cls=rc.pass?'mx-pass':'mx-fail';
+          const icon=rc.pass?'✓':'✗';
+          h+=`<td><span class="mx-c ${cls}" onclick="showCellDetail('${key}')" title="${esc(rn)}">${icon}</span></td>`;
+        }else{
+          _cellData[key]={item:r.item,rule:rn,pass:null,reason:'AI未返回该条分析'};
+          h+=`<td><span class="mx-c mx-unk" onclick="showCellDetail('${key}')" title="${esc(rn)}">?</span></td>`;
+        }
+      });
+      h+='</tr>';
+    });
+  }else{
+    h+=`<tr><td colspan="${allR.length+1}" style="text-align:center;color:#999;padding:20px">等待分析结果...</td></tr>`;
+  }
+  h+='</tbody></table></div>';
+  return h;
+}
+
+function ELEMENT_RULES_DATA(elementType){
+  // Return categorized rules from the RN data
+  return RN[elementType]||[];
+}
+
+function findRuleCheck(rulesCheck,ruleName){
+  if(!rulesCheck||!rulesCheck.length)return null;
+  return rulesCheck.find(rc=>rc.rule&&(
+    rc.rule===ruleName||
+    ruleName.includes(rc.rule)||
+    rc.rule.includes(ruleName)
+  ))||null;
+}
+
+function showCellDetail(key){
+  const d=_cellData[key];
+  if(!d)return;
+  const bg=document.createElement('div');
+  bg.className='cell-modal-bg';
+  bg.onclick=function(e){if(e.target===bg)bg.remove()};
+  const passCls=d.pass===true?'cm-pass':d.pass===false?'cm-fail':'cm-unk';
+  const passTxt=d.pass===true?'✅ 通过':d.pass===false?'❌ 不通过':'⚠️ 未分析';
+  bg.innerHTML=`<div class="cell-modal"><h4>${esc(d.item)}</h4><div style="margin-bottom:8px"><b>规则：</b>${esc(d.rule)}</div><div style="margin-bottom:8px"><span class="${passCls}">${passTxt}</span></div><div style="margin-bottom:4px"><b>分析理由：</b></div><div style="color:#555;line-height:1.8;background:#f9f9f9;padding:10px;border-radius:6px">${esc(d.reason)||'<span style="color:#999">无详细分析</span>'}</div><button class="cm-close" onclick="this.closest('.cell-modal-bg').remove()">关闭</button></div>`;
+  document.body.appendChild(bg);
+}
 
 function renderRulesDetail(elementType, rulesCheck){
   const allR = RN[elementType] || [];

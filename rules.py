@@ -72,6 +72,10 @@ ELEMENT_RULES = {
             "操作/动作/行为（如：审批、提交）",
             "系统/模块/功能（如：采购系统、报表模块）",
         ],
+        "definition": [
+            {"rule": "编码唯一", "desc": "业务对象元素的编码在企业内唯一，并遵循相同的编码规范", "positive": "BOPUR001（BO+领域缩写+3位序列号）", "negative": ""},
+            {"rule": "描述内容完整", "desc": "业务对象应有明确描述，包括目的（为什么）、定义（是什么）和范围（含哪些），范围不应局限于某类产品", "positive": "采购需求是企业对物资/服务的采购申请与业务承诺，驱动采购计划与订单下达", "negative": ""},
+        ],
     },
     "逻辑实体": {
         "description": "业务对象下描述某方面特征的逻辑数据实体",
@@ -102,6 +106,14 @@ ELEMENT_RULES = {
             "衍生数据（如：宽表、汇总表）",
             "独立的业务对象（逻辑实体必须依附于业务对象）",
         ],
+        "definition": [
+            {"rule": "编码唯一", "desc": "逻辑实体元素的编码在企业内唯一，并遵循相同的编码规范", "positive": "LEPUR0001（LE+领域缩写+4位序列号）", "negative": ""},
+            {"rule": "必须有主键", "desc": "实体应具有业务主键，且业务主键在生命周期内不改变", "positive": "采购需求头的主键是“采购需求编号”", "negative": ""},
+            {"rule": "主键稳定", "desc": "标识符的取值在其生命周期过程中不应变化或废止", "positive": "采购需求编号一经产生，就不会被修改", "negative": ""},
+            {"rule": "主键有业务含义", "desc": "主键有业务含义，所有用户可获取、理解和使用", "positive": "采购需求编号280020260604000004标识管理单元2800下2026年6月4日第4单需求", "negative": ""},
+            {"rule": "实体归属唯一", "desc": "逻辑实体必须归属于唯一的业务对象", "positive": "采购需求关系、采购需求行关系归属于业务对象“采购需求”", "negative": ""},
+            {"rule": "描述内容完整", "desc": "逻辑实体应有明确描述，包括目的、定义和范围", "positive": "采购需求头：是一份采购需求申请单的摘要和控制信息", "negative": ""},
+        ],
     },
     "业务属性": {
         "description": "逻辑实体下最小业务语义单元",
@@ -125,6 +137,7 @@ ELEMENT_RULES = {
             "逻辑实体（如采购需求行是实体不是属性）",
             "可拆分的复合字段",
         ],
+        "definition": [],
     },
 }
 
@@ -183,8 +196,11 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
     if not rules:
         return ""
 
-    # 规则详情
+    # 规则详情 - 包含所有规则类型
     id_rules = rules["identification"]
+    nm_rules = rules.get("naming", [])
+    df_rules = rules.get("definition", [])
+    
     id_detail = ""
     for i, r in enumerate(id_rules, 1):
         id_detail += f"\n{i}. 【{r['rule']}】{r['desc']}"
@@ -192,6 +208,24 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
             id_detail += f"（正例：{r['positive']}）"
         if r.get("negative"):
             id_detail += f"（反例：{r['negative']}）"
+
+    nm_detail = ""
+    if nm_rules:
+        for i, r in enumerate(nm_rules, 1):
+            nm_detail += f"\n{i}. 【{r['rule']}】{r['desc']}"
+            if r.get("positive"):
+                nm_detail += f"（正例：{r['positive']}）"
+            if r.get("negative"):
+                nm_detail += f"（反例：{r['negative']}）"
+
+    df_detail = ""
+    if df_rules:
+        for i, r in enumerate(df_rules, 1):
+            df_detail += f"\n{i}. 【{r['rule']}】{r['desc']}"
+            if r.get("positive"):
+                df_detail += f"（正例：{r['positive']}）"
+            if r.get("negative"):
+                df_detail += f"（反例：{r['negative']}）"
 
     not_summary = ""
     if rules.get("not_examples"):
@@ -209,22 +243,26 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
             if neg:
                 kb_section += "\n已确认不是的：" + "、".join(f"{e['item']}（{e.get('reason','')}）" for e in neg[:6])
 
-    # 构建规则名称列表供逐条分析
-    rule_names = [r["rule"] for r in id_rules]
-    rule_names_json = json.dumps(rule_names, ensure_ascii=False)
+    # 构建所有规则名称列表供逐条分析
+    all_rule_names = [r["rule"] for r in id_rules] + [r["rule"] for r in nm_rules] + [r["rule"] for r in df_rules]
+    rule_names_json = json.dumps(all_rule_names, ensure_ascii=False)
 
     return f"""你是一个数据治理专家。请判断以下事物是否是「{element_type}」。
 
 ## {element_type}定义
 {rules['description']}
 
-## 识别规则（需全部满足）{id_detail}{not_summary}{kb_section}
+## 识别规则（需全部满足）{id_detail}
+
+## 命名规则{nm_detail}
+
+## 定义规则{df_detail}{not_summary}{kb_section}
 
 ## 输出要求
 
 **第一步：先用自然语言对每个事物进行分析思考**
 
-对每个事物逐条规则分析，格式如：
+对每个事物逐条规则分析（包括识别规则、命名规则、定义规则），格式如：
 **1. 事物名**
 - 分析：简要分析这个事物是什么，与{element_type}的关系
 - 规则判断：
@@ -246,7 +284,7 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
 
 说明：
 - is_bo: true=是{element_type}, false=不是, null=无法确定需人工判断
-- rules_check: 对每条识别规则逐一判断，rule名必须与上面的规则名完全一致
+- rules_check: 对所有规则（识别+命名+定义）逐一判断，rule名必须与上面的规则名完全一致
 
 规则名列表：{rule_names_json}
 
@@ -265,6 +303,10 @@ def get_all_rules_text() -> dict:
         parts.append("\n## 命名规则")
         for r in rules["naming"]:
             parts.append(f"- **{r['rule']}**：{r['desc']}")
+        if rules.get("definition"):
+            parts.append("\n## 定义规则")
+            for r in rules["definition"]:
+                parts.append(f"- **{r['rule']}**：{r['desc']}")
         if rules.get("not_examples"):
             parts.append("\n## 常见反例")
             for ex in rules["not_examples"]:
