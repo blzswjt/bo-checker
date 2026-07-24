@@ -315,6 +315,17 @@ def get_all_rules_text() -> dict:
     return result
 
 
+def get_rule_detail(etype: str, rule_name: str) -> str:
+    """获取某条规则的详细描述，用于答疑智能体"""
+    rules = ELEMENT_RULES.get(etype, {})
+    for category in ["identification", "naming", "definition"]:
+        for r in rules.get(category, []):
+            if r["rule"] == rule_name or rule_name in r["rule"] or r["rule"] in rule_name:
+                cat_name = {"identification": "识别规则", "naming": "命名规则", "definition": "定义规则"}.get(category, category)
+                return f"规则类别：{cat_name}\n规则名称：{r['rule']}\n规则描述：{r['desc']}"
+    return f"规则名称：{rule_name}\n（未找到详细描述）"
+
+
 # 列名关键词 → 元素类型推荐映射
 COLUMN_TYPE_KEYWORDS = {
     "主题域分类": ["主题域分类", "分类名称", "L1"],

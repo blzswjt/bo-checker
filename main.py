@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from llm import chat_stream, get_available_models, get_default_model_id
-from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text
+from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text, get_rule_detail
 from checker import parse_excel_file, extract_column_values, check_items_stream, check_single_item
 import kb
 
@@ -188,6 +188,66 @@ async def get_knowledge_base():
 async def update_knowledge_base(data: dict):
     """整体更新知识库"""
     kb.update_all(data)
+    return {"ok": True}
+
+
+# ============================================================
+# 答疑智能体
+# ============================================================
+
+class QAChatRequest(BaseModel):
+    item: str
+    element_type: str
+    rule: str
+    pass_status: bool
+    reason: str = ""
+    question: str
+    history: list[dict] = []  # [{role:'user',content:'...'}, {role:'assistant',content:'...'}]
+    model_id: Optional[str] = None
+
+
+@app.post("/api/qa-chat")
+async def qa_chat(req: QAChatRequest):
+    """答疑智能体：解释规则判断原因，支持多轮对话"""
+    rule_detail = get_rule_detail(req.element_type, req.rule)
+    pass_text = "通过（✓）" if req.pass_status else "不通过（✗）"
+
+    system_prompt = (
+        f"你是数据建模答疑专家。用户正在分析「{req.item}」是否为{req.element_type}。\n"
+        f"\n{rule_detail}\n"
+        f"\nAI分析结论：该规则{pass_text}\n"
+        f"分析理由：{req.reason or '无详细理由'}\n\n"
+        "请根据以上信息回答用户的疑问。如果用户不理解为什么通过或不通过，请详细解释。"
+        "回答要简洁明了，用通俗易懂的语言。"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    for h in req.history[-6:]:  # 最多保留最近6条历史
+        messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+    messages.append({"role": "user", "content": req.question})
+
+    def generate():
+        for chunk in chat_stream(messages, temperature=0.3, model_id=req.model_id):
+            yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+class QASaveRequest(BaseModel):
+    item: str
+    element_type: str
+    rule: str
+    pass_status: bool
+    question: str
+    answer: str
+
+
+@app.post("/api/qa-save")
+async def qa_save(req: QASaveRequest):
+    """将答疑内容存入知识库"""
+    reason = f"答疑：{req.question} → {req.answer[:200]}"
+    kb.add_example(req.element_type, req.item, req.pass_status, reason)
     return {"ok": True}
 
 
