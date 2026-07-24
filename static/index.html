@@ -503,6 +503,17 @@ async function startAll(id){
                 p._thinkBatchSpan.appendChild(document.createTextNode(ev.token));
                 const ct=getThinkCt(t,pi);
                 if(ct)ct.scrollTop=ct.scrollHeight;
+              } else {
+                // span不存在（可能被render重建），强制显示思考内容
+                const ct=getThinkCt(t,pi);
+                if(ct){
+                  if(ct.innerHTML.includes('等待AI思考')||!ct.innerHTML.trim())ct.innerHTML='';
+                  ct.innerHTML=formatThinking(p.thinkingText);
+                  ct.classList.remove('hidden');
+                  ct.scrollTop=ct.scrollHeight;
+                  const box=ct.closest('.think-box');if(box){const ar=box.querySelector('.raw-arrow');if(ar)ar.textContent='▼'}
+                  updateThinkStatus(t,pi,'思考中...');
+                }
               }
             }
             else if(ev.type==='thinking_end'){
@@ -561,9 +572,14 @@ function toggleThink(hd){
   arrow.textContent=ct.classList.contains('hidden')?'▶':'▼';
 }
 function formatThinking(text){
-  // hide JSON block
+  // 安全移除JSON块：先移除```json...```块，再移除裸JSON对象
   text = text.replace(/```json[\s\S]*?```/g, '');
-  text = text.replace(/\{[\s\S]*"results"[\s\S]*\}/g, '');
+  // 只移除看起来像JSON对象的块（以{开头且含"results"键）
+  text = text.replace(/\{[^{}]*"results"[\s\S]*?\}/g, function(m){
+    // 验证是真正的JSON对象（包含results数组）
+    if(m.includes('"results"')&&(m.includes('"item"')||m.includes('"is_bo"')))return '';
+    return m;
+  });
   return esc(text.trim())
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
     .replace(/`(.+?)`/g,'<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px">$1</code>')
@@ -776,11 +792,20 @@ function ELEMENT_RULES_DATA(elementType){
 
 function findRuleCheck(rulesCheck,ruleName){
   if(!rulesCheck||!rulesCheck.length)return null;
-  return rulesCheck.find(rc=>rc.rule&&(
-    rc.rule===ruleName||
-    ruleName.includes(rc.rule)||
-    rc.rule.includes(ruleName)
-  ))||null;
+  // 精确匹配
+  let rc=rulesCheck.find(r=>r.rule&&r.rule===ruleName);
+  if(rc)return rc;
+  // 包含匹配
+  rc=rulesCheck.find(r=>r.rule&&(ruleName.includes(r.rule)||r.rule.includes(ruleName)));
+  if(rc)return rc;
+  // 模糊匹配：去掉常见前后缀再比较
+  rc=rulesCheck.find(r=>{
+    if(!r.rule)return false;
+    const a=ruleName.replace(/[规范原则要求信息]/g,'').trim();
+    const b=r.rule.replace(/[规范原则要求信息]/g,'').trim();
+    return a&&b&&(a.includes(b)||b.includes(a));
+  });
+  return rc||null;
 }
 
 let _qaHistory={}; // {key: [{role,content}]}
@@ -950,8 +975,10 @@ function updateSingleMatrixCell(t,pi,ev){
     tbody.appendChild(tr);
     tr.scrollIntoView({behavior:'smooth',block:'nearest'});
   }
-  // 更新对应规则的单元格
-  const ruleColIdx=allR.findIndex(rn=>rn===ev.rule||ev.rule.includes(rn)||rn.includes(ev.rule));
+  // 更新对应规则的单元格 - 与findRuleCheck一致的模糊匹配
+  let ruleColIdx=allR.findIndex(rn=>rn===ev.rule);
+  if(ruleColIdx<0)ruleColIdx=allR.findIndex(rn=>ev.rule.includes(rn)||rn.includes(ev.rule));
+  if(ruleColIdx<0){const s=ev.rule.replace(/[规范原则要求信息]/g,'').trim();ruleColIdx=allR.findIndex(rn=>{const t=rn.replace(/[规范原则要求信息]/g,'').trim();return s&&t&&(s.includes(t)||t.includes(s))});}
   if(ruleColIdx<0)return;
   const td=tr.children[ruleColIdx+1];
   if(!td)return;

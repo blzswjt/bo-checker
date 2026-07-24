@@ -173,10 +173,13 @@ def _parse_streaming_conclusions(text: str, batch: list[str]):
     results = []
     for line in text.split('\n'):
         line_s = line.strip()
+        # 跳过JSON块内的行
+        if line_s.startswith('```') or line_s.startswith('{') or line_s.startswith('"results"'):
+            continue
         # 检测新事物开始: 支持多种格式
-        # - **1. 事物名** / 1. 事物名 / ### 1. 事物名 / ## 1. 事物名
-        # - **### 1. 事物名** 等混合格式
-        m = re.match(r'(?:#+\s*)?(?:\*+)?\s*(\d+)[.\uff0e]\s*(.+?)(?:\*+)?$', line_s)
+        # - **1. 事物名** / 1. 事物名 / ### 1. 事物名 / #### 1. 事物名
+        # - **### 1. 事物名** / #### 1. 事物名（含####） 等混合格式
+        m = re.match(r'(?:#+\s*)?(?:\*+\s*)?(\d+)[.\uff0e\u3001]\s*(.+?)(?:\s*\*+)?$', line_s)
         if m:
             num = int(m.group(1))
             name = m.group(2).strip().rstrip('*').strip()
@@ -188,11 +191,11 @@ def _parse_streaming_conclusions(text: str, batch: list[str]):
         m = re.match(r'[-\-\*]*\s*\**\s*结论\**\s*[：:]\s*(.*)', line_s)
         if m and results and results[-1]['conclusion'] is None:
             conclusion_text = m.group(1).strip().lstrip('*').strip()
-            if '是' in conclusion_text and '不是' not in conclusion_text and '否' not in conclusion_text:
-                is_bo = True
-                confidence = 'high'
-            elif '不是' in conclusion_text or '否' in conclusion_text:
+            if '不是' in conclusion_text or '否' in conclusion_text:
                 is_bo = False
+                confidence = 'high'
+            elif '是' in conclusion_text:
+                is_bo = True
                 confidence = 'high'
             else:
                 is_bo = None
@@ -207,8 +210,8 @@ def _parse_streaming_conclusions(text: str, batch: list[str]):
 
 # 正则：检测规则判断行  ✓ 【规则名】理由  或  ✗ 【规则名】理由
 _RULE_CHECK_RE = re.compile(r'[✓✗]\s*【(.+?)】\s*(.*)')
-# 正则：检测事物标题
-_ITEM_HEADER_RE = re.compile(r'(?:#+\s*)?(?:\*+)?\s*(\d+)[.\uff0e]\s*(.+?)(?:\*+)?$')
+# 正则：检测事物标题 - 支持 #, **, 数字+点/顿号 等各种格式
+_ITEM_HEADER_RE = re.compile(r'(?:#+\s*)?(?:\*+\s*)?(\d+)[.\uff0e\u3001]\s*(.+?)(?:\s*\*+)?$')
 
 
 def _detect_streaming_rule_checks(text: str, batch: list[str], last_pos: int, emitted: dict):
