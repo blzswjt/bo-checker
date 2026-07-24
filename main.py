@@ -191,7 +191,16 @@ if __name__ == "__main__":
     print(f"Python: {sys.version}")
     print(f"工作目录: {os.getcwd()}")
     print(f"PORT: {os.getenv('PORT', '未设置')}")
-    print(f"LLM_API_KEY: {'已配置' if os.getenv('LLM_API_KEY') else '未配置'}")
+    print(f"DOUBAO_API_KEY: {'已配置' if os.getenv('DOUBAO_API_KEY') else '未配置'}")
+    print(f"QWEN_API_KEY: {'已配置' if os.getenv('QWEN_API_KEY') else '未配置'}")
+    print(f"DEFAULT_MODEL: {os.getenv('DEFAULT_MODEL', 'doubao')}")
+    # 检查关键依赖
+    for pkg in ['volcenginesdkarkruntime', 'openai', 'fastapi', 'uvicorn', 'pandas', 'openpyxl']:
+        try:
+            __import__(pkg)
+            print(f"  ✅ {pkg}")
+        except ImportError:
+            print(f"  ❌ {pkg} 未安装")
     print("=" * 50)
     port = int(os.getenv("PORT", 8005))
     print(f"启动服务: http://0.0.0.0:{port}")
