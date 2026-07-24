@@ -9,7 +9,7 @@ import json
 import re
 import pandas as pd
 from pathlib import Path
-from llm import chat, get_model_display_name
+from llm import chat, chat_stream, get_model_display_name
 from rules import build_batch_prompt, build_check_prompt, ELEMENT_TYPES, recommend_element_type
 import kb
 
@@ -201,8 +201,17 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
         ]
 
         try:
-            response = chat(messages, temperature=0.1, model_id=model_id)
-            parsed = parse_llm_response(response, batch)
+            # 流式调用：实时推送思考过程
+            batch_idx = i // batch_size
+            yield {"type": "thinking_start", "batch_index": batch_idx}
+            full_response = ""
+            for token in chat_stream(messages, temperature=0.1, model_id=model_id):
+                full_response += token
+                yield {"type": "thinking", "batch_index": batch_idx, "token": token}
+            yield {"type": "thinking_end", "batch_index": batch_idx}
+
+            # 解析完整响应
+            parsed = parse_llm_response(full_response, batch)
 
             for j, result in enumerate(parsed):
                 all_results.append(result)
@@ -215,8 +224,6 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                     "reason": result.get("reason", ""),
                     "rules_check": result.get("rules_check", []),
                 }
-            # 每批次发送原始推理过程
-            yield {"type": "raw_response", "batch_index": i, "raw": response}
         except Exception as e:
             for j, item in enumerate(batch):
                 result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"AI分析出错: {str(e)}", "rules_check": []}

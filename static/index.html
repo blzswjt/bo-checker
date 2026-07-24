@@ -252,8 +252,8 @@ function rRunning(t){
       });
     }
     h+=`</tbody></table></div>`;
-    // 推理过程区域
-    h+=`<div class="raw-box" id="raw-${t.id}-${pi}"><div class="raw-hd" onclick="toggleRaw(this)"><span>🔬 推理过程 (AI原始输出)</span><span class="raw-arrow">▶</span></div><div class="raw-ct" id="rawct-${t.id}-${pi}">${(p.rawResponses||[]).map((r,i)=>`<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed #ddd"><b>批次 ${i+1}:</b>\n${esc(r)}</div>`).join('')||'<span style="color:#999">暂无数据</span>'}</div></div>`;
+    // 思考过程区域
+    h+=`<div class="raw-box" id="raw-${t.id}-${pi}"><div class="raw-hd" onclick="toggleRaw(this)"><span>🧠 思考过程 <span id="thinking-status-${t.id}-${pi}" style="color:#1a73e8;font-weight:600"></span></span><span class="raw-arrow">▶</span></div><div class="raw-ct show" id="rawct-${t.id}-${pi}"></div></div>`;
     h+=`</div>`;
   });
   if(t.st==='done')h+=`<button class="btn btn-o" style="margin-top:8px" onclick="tReset(${t.id})">🔄 新建任务</button>`;
@@ -336,6 +336,9 @@ async function startAll(id){
             const ev=JSON.parse(line.slice(6));
             if(ev.type==='start'){p.modelName=ev.model_name;updatePairUI(t,pi)}
             else if(ev.type==='result'){p.results.push(ev);appendResultRow(t,pi,ev)}
+            else if(ev.type==='thinking_start'){appendThinkingBatch(t,pi,ev.batch_index)}
+            else if(ev.type==='thinking'){appendThinkingToken(t,pi,ev.token)}
+            else if(ev.type==='thinking_end'){endThinkingBatch(t,pi)}
             else if(ev.type==='raw_response'){p.rawResponses.push(ev.raw);appendRawResponse(t,pi,ev)}
             else if(ev.type==='progress'){updatePairProgress(t,pi,ev)}
             else if(ev.type==='done'){p.summary=ev.summary;p.status='done'}
@@ -370,12 +373,41 @@ function toggleRaw(hd){
 function appendRawResponse(t,pi,ev){
   const ct=document.getElementById(`rawct-${t.id}-${pi}`);if(!ct)return;
   const p=t.pairs[pi];
-  // 清除“暂无数据”提示
   if(p.rawResponses.length===1)ct.innerHTML='';
   const div=document.createElement('div');
   div.style.cssText='margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed #ddd';
   div.innerHTML=`<b>批次 ${p.rawResponses.length}:</b>\n${esc(ev.raw)}`;
   ct.appendChild(div);
+}
+let _thinkSpan=null;
+function appendThinkingBatch(t,pi,batchIdx){
+  const ct=document.getElementById(`rawct-${t.id}-${pi}`);if(!ct)return;
+  const status=document.getElementById(`thinking-status-${t.id}-${pi}`);
+  if(status)status.textContent=`思考中...`;
+  // 展开思考区域
+  const box=document.getElementById(`raw-${t.id}-${pi}`);
+  if(box){const c=box.querySelector('.raw-ct');if(c&&!c.classList.contains('show')){c.classList.add('show');const a=box.querySelector('.raw-arrow');if(a)a.textContent='▼'}}
+  _thinkSpan=document.createElement('span');
+  _thinkSpan.style.cssText='display:block;margin-top:6px;padding:4px 0;border-top:1px dashed #e0e0e0';
+  _thinkSpan.innerHTML=`<b style="color:#1a73e8;font-size:11px">🧠 批次 ${batchIdx+1} 思考中...</b><br>`;
+  ct.appendChild(_thinkSpan);
+  ct.scrollTop=ct.scrollHeight;
+}
+function appendThinkingToken(t,pi,token){
+  if(!_thinkSpan)return;
+  // 直接追加文本（不用esc，因为是流式输出）
+  _thinkSpan.appendChild(document.createTextNode(token));
+  const ct=document.getElementById(`rawct-${t.id}-${pi}`);
+  if(ct)ct.scrollTop=ct.scrollHeight;
+}
+function endThinkingBatch(t,pi){
+  const status=document.getElementById(`thinking-status-${t.id}-${pi}`);
+  if(status)status.textContent='✅ 思考完成';
+  if(_thinkSpan){
+    const b=_thinkSpan.querySelector('b');
+    if(b)b.textContent=b.textContent.replace('思考中...','思考完成');
+  }
+  _thinkSpan=null;
 }
 function updatePairProgress(t,pi,ev){
   const el=document.getElementById(`pf-${t.id}-${pi}`);
