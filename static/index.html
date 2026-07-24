@@ -312,9 +312,7 @@ function render(t){
   }
 }
 function rConfig(t){
-  let h='<div style="font-size:12px;color:#666;margin-bottom:6px">选择默认元素类型：</div><div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:10px">';
-  ET.forEach(e=>{h+=`<button class="chip${e===t.et?' on':''}" onclick="tSetType(${t.id},'${e}')">${e}</button>`});
-  h+=`</div><div class="upload-z" onclick="document.getElementById('f${t.id}').click()"><div class="ic">📁</div><div>点击或拖拽上传 <b>.xlsx</b></div><p>上传后展示所有子表和列，支持多列同时识别</p></div><input type="file" id="f${t.id}" accept=".xlsx,.xls" style="display:none" onchange="doUpload(${t.id},this)">`;
+  let h='<div class="upload-z" onclick="document.getElementById(\'f'+t.id+'\').click()"><div class="ic">📁</div><div>点击或拖拽上传 <b>.xlsx</b></div><p>上传后展示所有子表和列，支持多列同时识别</p></div><input type="file" id="f'+t.id+'" accept=".xlsx,.xls" style="display:none" onchange="doUpload('+t.id+',this)">';
   return h;
 }
 function rSelect(t){
@@ -405,8 +403,12 @@ async function doUpload(id,inp){
     if(d.error){t.st='error';t.error=d.error;render(t);renderSidebar();return}
     t.sheets=d.sheets||[];t.fp=d.file_path;t.aiRec=d.ai_recommendation||{};
     t.selSheet=d.ai_recommendation?.sheet||(d.sheets[0]?.name)||'';
-    const sh=t.sheets.find(s=>s.name===t.selSheet);
-    if(sh){sh.columns.forEach(c=>{if(c.recommended_type){addPairSilent(t,c.name,c.recommended_type)}})}
+    // 自动勾选所有子表中有AI推荐类型的列
+    t.sheets.forEach(s=>{s.columns.forEach(c=>{if(c.recommended_type){
+      if(!t.pairs.some(p=>p.sheet===s.name&&p.column===c.name)){
+        t.pairs.push({sheet:s.name,column:c.name,elementType:c.recommended_type,items:[],results:[],summary:null,status:'pending',_filter:null,thinkingText:'',thinkingDone:false,modelName:null});
+      }
+    }})});
     t.st='select';
   }catch(e){t.st='error';t.error='解析失败: '+e.message}
   render(t);renderSidebar();
