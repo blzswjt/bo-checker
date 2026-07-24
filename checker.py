@@ -173,17 +173,21 @@ def _parse_streaming_conclusions(text: str, batch: list[str]):
     results = []
     for line in text.split('\n'):
         line_s = line.strip()
-        # 检测新事物开始: **1. 事物名** 或 1. 事物名 （支持有/无粗体）
-        m = re.match(r'(?:\*\*)?(\d+)[.\uff0e]\s*(.+?)(?:\*\*)?$', line_s)
+        # 检测新事物开始: 支持多种格式
+        # - **1. 事物名** / 1. 事物名 / ### 1. 事物名 / ## 1. 事物名
+        # - **### 1. 事物名** 等混合格式
+        m = re.match(r'(?:#+\s*)?(?:\*+)?\s*(\d+)[.\uff0e]\s*(.+?)(?:\*+)?$', line_s)
         if m:
             num = int(m.group(1))
+            name = m.group(2).strip().rstrip('*').strip()
             if 1 <= num <= len(batch):
-                results.append({'idx': num - 1, 'name': m.group(2).strip(), 'conclusion': None})
+                results.append({'idx': num - 1, 'name': name, 'conclusion': None})
             continue
-        # 检测结论行: - 结论：是/不是/待人工
-        m = re.match(r'[-\-]\s*结论[：:]\s*(.*)', line_s)
+        # 检测结论行: 支持多种格式
+        # - 结论：是 / - **结论：** 是 / 结论：是 / **结论：** 是
+        m = re.match(r'[-\-\*]*\s*\**\s*结论\**\s*[：:]\s*(.*)', line_s)
         if m and results and results[-1]['conclusion'] is None:
-            conclusion_text = m.group(1).strip()
+            conclusion_text = m.group(1).strip().lstrip('*').strip()
             if '是' in conclusion_text and '不是' not in conclusion_text and '否' not in conclusion_text:
                 is_bo = True
                 confidence = 'high'
