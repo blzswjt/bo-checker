@@ -221,7 +221,20 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
 ## 识别规则（需全部满足）{id_detail}{not_summary}{kb_section}
 
 ## 输出要求
-对每个事物逐条规则分析，输出JSON：
+
+**第一步：先用自然语言对每个事物进行分析思考**
+
+对每个事物逐条规则分析，格式如：
+**1. 事物名**
+- 分析：简要分析这个事物是什么，与{element_type}的关系
+- 规则判断：
+  - ✓/✗ 【规则名】满足或不满足的原因
+- 结论：是/不是/待人工
+
+**第二步：最后输出JSON结果**
+
+分析完所有事物后，输出最终JSON：
+```json
 {{"results": [{{
   "item": "事物名",
   "is_bo": true/false/null,
@@ -229,10 +242,10 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
   "reason": "总体简要理由",
   "rules_check": [{{"rule": "规则名", "pass": true/false, "reason": "满足或不满足的简要原因"}}]
 }}]}}
+```
 
 说明：
 - is_bo: true=是{element_type}, false=不是, null=无法确定需人工判断
-- confidence: high/medium/low
 - rules_check: 对每条识别规则逐一判断，rule名必须与上面的规则名完全一致
 
 规则名列表：{rule_names_json}

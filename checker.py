@@ -196,7 +196,7 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
             continue
 
         messages = [
-            {"role": "system", "content": "你是数据治理专家，严格按JSON格式输出结果，必须包含rules_check逐条规则分析。"},
+            {"role": "system", "content": "你是数据治理专家。请先用自然语言对每个事物进行分析思考，然后再输出JSON结果。"},
             {"role": "user", "content": prompt}
         ]
 
@@ -243,7 +243,25 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
 
 
 def parse_llm_response(response: str, items: list[str]) -> list[dict]:
-    """解析 LLM 返回的 JSON 结果"""
+    """解析 LLM 返回的结果，从混合文本中提取JSON"""
+    # 优先从 ```json 代码块中提取
+    json_block = re.search(r'```json\s*(\{[\s\S]*?"results"[\s\S]*?\})\s*```', response)
+    if json_block:
+        try:
+            data = json.loads(json_block.group(1))
+            results = data.get("results", [])
+            if len(results) == len(items):
+                return results
+            elif len(results) > 0:
+                result_map = {r.get("item", ""): r for r in results}
+                return [
+                    result_map.get(item, {"item": item, "is_bo": None, "confidence": "low", "reason": "未返回该项结果"})
+                    for item in items
+                ]
+        except json.JSONDecodeError:
+            pass
+
+    # 回退：从全文中提取JSON
     json_match = re.search(r'\{[\s\S]*"results"[\s\S]*\}', response)
     if json_match:
         try:
