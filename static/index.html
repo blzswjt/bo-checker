@@ -540,18 +540,23 @@ function formatThinking(text){
     .replace(/✗/g,'<span style="color:#c62828;font-weight:700">✗</span>');
 }
 function appendResultRow(t,pi,ev){
-  const tb=document.getElementById(`tb-${t.id}-${pi}`);if(!tb)return;
-  const p=t.pairs[pi];const ri=p.results.length-1;
-  const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
-  const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
-  const cc=ev.confidence==='high'?'cf-h':ev.confidence==='medium'?'cf-m':'cf-l';
-  const ct=ev.confidence==='high'?'高':ev.confidence==='medium'?'中':'低';
-  const tr1=document.createElement('tr');tr1.className='new';
-  tr1.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${p.results.length}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
-  const tr2=document.createElement('tr');tr2.className='detail-row';tr2.style.display='none';
-  tr2.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
-  tb.appendChild(tr1);tb.appendChild(tr2);
-  tr1.scrollIntoView({behavior:'smooth',block:'nearest'});
+  // 列表视图追加
+  const tb=document.getElementById(`tb-${t.id}-${pi}`);
+  if(tb){
+    const p=t.pairs[pi];const ri=p.results.length-1;
+    const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
+    const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
+    const cc=ev.confidence==='high'?'cf-h':ev.confidence==='medium'?'cf-m':'cf-l';
+    const ct=ev.confidence==='high'?'高':ev.confidence==='medium'?'中':'低';
+    const tr1=document.createElement('tr');tr1.className='new';
+    tr1.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${p.results.length}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
+    const tr2=document.createElement('tr');tr2.className='detail-row';tr2.style.display='none';
+    tr2.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
+    tb.appendChild(tr1);tb.appendChild(tr2);
+    tr1.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+  // 矩阵视图也追加
+  appendMatrixRow(t,pi,ev);
 }
 function updateResultRow(t,pi,ev){
   const p=t.pairs[pi];
@@ -564,22 +569,26 @@ function updateResultRow(t,pi,ev){
   p.results[ri].confidence=ev.confidence;
   p.results[ri].reason=ev.reason;
   p.results[ri].rules_check=ev.rules_check||[];
-  // 更新DOM
-  const tb=document.getElementById(`tb-${t.id}-${pi}`);if(!tb)return;
-  const rows=tb.querySelectorAll('tr:not(.detail-row)');
-  if(ri>=rows.length)return;
-  const tr1=rows[ri];
-  const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
-  const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
-  const cc=ev.confidence==='high'?'cf-h':ev.confidence==='medium'?'cf-m':'cf-l';
-  const ct=ev.confidence==='high'?'高':ev.confidence==='medium'?'中':'低';
-  tr1.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${ri+1}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
-  // 更新detail row
-  const detailRow=tr1.nextElementSibling;
-  if(detailRow&&detailRow.classList.contains('detail-row')){
-    detailRow.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
+  // 更新列表视图DOM
+  const tb=document.getElementById(`tb-${t.id}-${pi}`);
+  if(tb){
+    const rows=tb.querySelectorAll('tr:not(.detail-row)');
+    if(ri<rows.length){
+      const tr1=rows[ri];
+      const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
+      const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
+      const cc=ev.confidence==='high'?'cf-h':ev.confidence==='medium'?'cf-m':'cf-l';
+      const ct=ev.confidence==='high'?'高':ev.confidence==='medium'?'中':'低';
+      tr1.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${ri+1}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
+      const detailRow=tr1.nextElementSibling;
+      if(detailRow&&detailRow.classList.contains('detail-row')){
+        detailRow.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
+      }
+      tr1.classList.add('new');
+    }
   }
-  tr1.classList.add('new');
+  // 矩阵视图也更新
+  updateMatrixCells(t,pi,ri,ev);
 }
 
 function toggleDetail(btn){
@@ -785,6 +794,67 @@ function initMatrixResize(container){
       document.addEventListener('mouseup',onUp);
     });
   });
+}
+
+// 矩阵视图流式追加：思考完一个结论立即在矩阵中出现一行
+function appendMatrixRow(t,pi,ev){
+  const tbl=document.getElementById('mxtbl-'+t.id+'-'+pi);
+  if(!tbl)return;
+  const tbody=tbl.querySelector('tbody');
+  if(!tbody)return;
+  const p=t.pairs[pi];
+  const ri=p.results.length-1;
+  const allR=RN[p.elementType]||[];
+  const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
+  const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
+  const tr=document.createElement('tr');
+  tr.id='mxrow-'+t.id+'-'+pi+'-'+ri;
+  tr.className='new';
+  let cells=`<td><b>${esc(ev.item)}</b> <span class="bdg ${bdg}" style="font-size:9px">${btxt}</span></td>`;
+  allR.forEach(rn=>{
+    const rc=findRuleCheck(ev.rules_check,rn);
+    const key=t.id+'_'+pi+'_'+ri+'_'+rn;
+    if(rc){
+      _cellData[key]={item:ev.item,rule:rn,pass:rc.pass,reason:rc.reason||''};
+      const cls=rc.pass?'mx-pass':'mx-fail';
+      cells+=`<td><span class="mx-c ${cls}" onclick="showCellDetail('${key}')" title="${esc(rn)}">${rc.pass?'✓':'✗'}</span></td>`;
+    }else{
+      _cellData[key]={item:ev.item,rule:rn,pass:null,reason:'AI未返回该条分析'};
+      cells+=`<td><span class="mx-c mx-unk" onclick="showCellDetail('${key}')" title="${esc(rn)}">?</span></td>`;
+    }
+  });
+  tr.innerHTML=cells;
+  const placeholder=tbody.querySelector('td[colspan]');
+  if(placeholder)placeholder.parentElement.remove();
+  tbody.appendChild(tr);
+  tr.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// 矩阵视图单元格更新：JSON到达后更新某行的✓✗状态
+function updateMatrixCells(t,pi,ri,ev){
+  const tr=document.getElementById('mxrow-'+t.id+'-'+pi+'-'+ri);
+  if(!tr)return;
+  const p=t.pairs[pi];
+  const allR=RN[p.elementType]||[];
+  const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
+  const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
+  const firstTd=tr.children[0];
+  if(firstTd)firstTd.innerHTML=`<b>${esc(ev.item)}</b> <span class="bdg ${bdg}" style="font-size:9px">${btxt}</span>`;
+  allR.forEach((rn,ci)=>{
+    const td=tr.children[ci+1];
+    if(!td)return;
+    const rc=findRuleCheck(ev.rules_check,rn);
+    const key=t.id+'_'+pi+'_'+ri+'_'+rn;
+    if(rc){
+      _cellData[key]={item:ev.item,rule:rn,pass:rc.pass,reason:rc.reason||''};
+      const cls=rc.pass?'mx-pass':'mx-fail';
+      td.innerHTML=`<span class="mx-c ${cls}" onclick="showCellDetail('${key}')" title="${esc(rn)}">${rc.pass?'✓':'✗'}</span>`;
+    }else{
+      _cellData[key]={item:ev.item,rule:rn,pass:null,reason:'AI未返回该条分析'};
+      td.innerHTML=`<span class="mx-c mx-unk" onclick="showCellDetail('${key}')" title="${esc(rn)}">?</span>`;
+    }
+  });
+  tr.classList.add('new');
 }
 
 function renderRulesDetail(elementType, rulesCheck){
