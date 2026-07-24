@@ -6,11 +6,42 @@
 <title>数据建模识别智能体</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333;min-height:100vh}
-.hdr{background:linear-gradient(135deg,#1a73e8,#4285f4);color:#fff;padding:14px 28px;display:flex;justify-content:space-between;align-items:center}
-.hdr h1{font-size:18px}.hdr p{font-size:11px;opacity:.85;margin-top:2px}
-.nav{display:flex;gap:3px}.nav button{padding:7px 16px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;background:rgba(255,255,255,.15);color:#fff;border:none;transition:.2s}.nav button.on{background:#fff;color:#1a73e8}.nav button:hover:not(.on){background:rgba(255,255,255,.25)}
-.wrap{max-width:1200px;margin:0 auto;padding:18px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333;min-height:100vh;display:flex;flex-direction:column}
+/* Header */
+.hdr{background:linear-gradient(135deg,#1a73e8,#4285f4);color:#fff;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;z-index:100}
+.hdr h1{font-size:16px}.hdr p{font-size:10px;opacity:.85;margin-top:1px}
+.hdr-right{display:flex;align-items:center;gap:10px}
+.model-sel-wrap{display:flex;align-items:center;gap:5px}
+.model-sel-wrap label{font-size:11px;opacity:.8}
+#modelSel{padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.25);color:#fff;font-size:11px;cursor:pointer;outline:none;min-width:140px}
+#modelSel option{background:#1a73e8;color:#fff}
+.nav{display:flex;gap:3px}.nav button{padding:6px 14px;border-radius:7px;cursor:pointer;font-size:11px;font-weight:500;background:rgba(255,255,255,.15);color:#fff;border:none;transition:.2s}.nav button.on{background:#fff;color:#1a73e8}.nav button:hover:not(.on){background:rgba(255,255,255,.25)}
+/* Layout */
+.main-layout{display:flex;flex:1;overflow:hidden}
+/* Sidebar */
+.sidebar{width:260px;background:#fff;border-right:1px solid #e0e0e0;display:flex;flex-direction:column;transition:width .3s;flex-shrink:0;overflow:hidden}
+.sidebar.collapsed{width:48px}
+.sidebar.collapsed .sb-body,.sidebar.collapsed .sb-ft{display:none}
+.sidebar.collapsed .sb-hd span,.sidebar.collapsed .sb-hd .sb-new{display:none}
+.sb-hd{padding:12px 14px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+.sb-hd span{font-size:13px;font-weight:600;color:#333}
+.sb-toggle{background:none;border:none;cursor:pointer;font-size:16px;color:#999;padding:2px}
+.sb-toggle:hover{color:#333}
+.sb-new{padding:4px 10px;border-radius:5px;border:1px solid #1a73e8;background:#fff;color:#1a73e8;font-size:11px;cursor:pointer;white-space:nowrap}
+.sb-new:hover{background:#e8f0fe}
+.sb-body{flex:1;overflow-y:auto;padding:6px}
+.sb-item{padding:10px 12px;border-radius:7px;cursor:pointer;margin-bottom:3px;font-size:12px;display:flex;justify-content:space-between;align-items:center;transition:.15s;border:1.5px solid transparent}
+.sb-item:hover{background:#f5f7fa}
+.sb-item.active{background:#e8f0fe;border-color:#1a73e8}
+.sb-item .sb-title{font-weight:500;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.sb-item .sb-badge{font-size:9px;padding:2px 6px;border-radius:4px;flex-shrink:0;margin-left:6px}
+.sb-b-config{background:#fff3e0;color:#e65100}
+.sb-b-running{background:#e3f2fd;color:#1565c0}
+.sb-b-done{background:#e8f5e9;color:#2e7d32}
+.sb-b-error{background:#fce4ec;color:#c62828}
+.sb-ft{padding:8px 14px;border-top:1px solid #eee;font-size:10px;color:#999;text-align:center}
+/* Content */
+.content{flex:1;overflow-y:auto;padding:18px}
 .pg{display:none}.pg.on{display:block}
 .card{background:#fff;border-radius:10px;padding:18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #e8e8e8}
 .card h3{font-size:14px;margin-bottom:10px;color:#1a1a1a}
@@ -20,7 +51,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .btn-s{padding:3px 10px;font-size:11px}
 .btn-g{background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9}.btn-g:hover{background:#c8e6c9}
 .btn-r{background:#fce4ec;color:#c62828;border:1px solid #ffcdd2}.btn-r:hover{background:#ffcdd2}
-.btn-d{background:#fff3e0;color:#e65100;border:1px solid #ffe0b2}
 .chip{display:inline-block;padding:4px 12px;border:1.5px solid #e0e0e0;border-radius:14px;background:#fff;cursor:pointer;font-size:11px;color:#555;transition:.2s}
 .chip:hover{border-color:#1a73e8;color:#1a73e8}.chip.on{border-color:#1a73e8;background:#e8f0fe;color:#1a73e8;font-weight:600}
 .upload-z{border:2px dashed #d9d9d9;border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:.2s}
@@ -30,14 +60,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .col-list{max-height:240px;overflow-y:auto;border:1px solid #eee;border-radius:6px;margin-bottom:10px}
 .col-r{display:flex;align-items:center;padding:6px 10px;border-bottom:1px solid #f5f5f5;cursor:pointer;gap:8px;font-size:12px}
 .col-r:hover{background:#f8f8f8}.col-r.sel{background:#e8f0fe}
-.col-rd{width:14px;height:14px;border-radius:50%;border:2px solid #ccc;flex-shrink:0;display:flex;align-items:center;justify-content:center}
-.col-r.sel .col-rd{border-color:#1a73e8}.col-r.sel .col-rd::after{content:"";width:7px;height:7px;border-radius:50%;background:#1a73e8}
 .cn{font-weight:600;min-width:120px}.cm{color:#999;font-size:10px;flex-shrink:0}.cs{color:#777;font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ai-b{background:#ff9800;color:#fff;font-size:8px;padding:1px 5px;border-radius:3px;font-weight:600}
 .pair{border:1px solid #e8e8e8;border-radius:8px;padding:12px;margin-bottom:10px;background:#fafafa}
 .pair-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .pair-title{font-size:13px;font-weight:600;color:#1a73e8}
-.type-sel{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:8px}
 .prog-t{height:6px;background:#e8e8e8;border-radius:3px;overflow:hidden;margin:8px 0}
 .prog-f{height:100%;background:linear-gradient(90deg,#1a73e8,#42a5f5);border-radius:3px;transition:width .4s;width:0%}
 .prog-txt{font-size:11px;color:#888;display:flex;justify-content:space-between}
@@ -65,114 +92,174 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .rules-detail .ri-reason{color:#666;font-size:11px;flex:1}
 .ri-fail .ri-name{color:#c62828}
 .ri-fail .ri-reason{color:#c62828;font-weight:500}
-.correct-row{display:flex;gap:4px;align-items:center;margin-top:4px}
-.correct-row input{flex:1;padding:3px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px}
-.kb-grid{display:grid;grid-template-columns:200px 1fr;gap:16px}
-.kb-sidebar{border-right:1px solid #eee;padding-right:16px}
-.kb-item{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f3f3;font-size:12px}
-.kb-item .nm{font-weight:600}.kb-item .mt{font-size:10px}
-.kb-item .mt-y{color:#2e7d32}.kb-item .mt-n{color:#c62828}
-.add-form{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
-.add-form input,.add-form select{padding:5px 10px;border:1px solid #ddd;border-radius:5px;font-size:12px}
+.tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:10px;background:#e3f2fd;color:#1565c0}
+/* Thinking area */
+.think-box{margin-top:10px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;background:#fff}
+.think-hd{padding:8px 14px;background:linear-gradient(90deg,#f8f9fa,#eef1f5);cursor:pointer;font-size:12px;color:#555;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.think-hd:hover{background:linear-gradient(90deg,#eef1f5,#e8ebf0)}
+.think-ct{padding:14px 16px;font-size:12px;line-height:1.8;white-space:pre-wrap;color:#444;max-height:500px;overflow-y:auto;border-top:1px solid #e0e0e0;font-family:'Segoe UI',system-ui,sans-serif}
+.think-ct.hidden{display:none}
+.think-ct strong{color:#1a73e8}
+.think-ct .th-item{margin-bottom:12px;padding-bottom:10px;border-bottom:1px dashed #e0e0e0}
+.think-ct .th-conclusion{padding:6px 10px;border-radius:5px;margin-top:4px;font-weight:600}
+.th-conclusion-y{background:#e8f5e9;color:#2e7d32}
+.th-conclusion-n{background:#fce4ec;color:#c62828}
+.th-conclusion-u{background:#fff3e0;color:#e65100}
+/* Single analysis */
 .single-in{display:flex;gap:6px}.single-in input{flex:1;padding:8px 12px;border:1px solid #d9d9d9;border-radius:7px;font-size:13px;outline:none}
 .single-in input:focus{border-color:#1a73e8}
 .single-res{margin-top:12px;padding:14px;background:#f9f9f9;border-radius:7px;font-size:13px;line-height:1.8;white-space:pre-wrap}
+/* Rules */
 .rules-tabs{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:12px}
 .rules-tab{padding:4px 12px;border-radius:5px;cursor:pointer;font-size:11px;background:#f5f5f5;color:#666;border:none}
 .rules-tab.on{background:#1a73e8;color:#fff}
 .rules-ct{font-size:12px;line-height:1.8;white-space:pre-wrap;color:#555;max-height:550px;overflow-y:auto;padding:14px;background:#fafafa;border-radius:7px}
+/* KB */
+.add-form{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.add-form input,.add-form select{padding:5px 10px;border:1px solid #ddd;border-radius:5px;font-size:12px}
+.kb-item{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f3f3;font-size:12px}
+.kb-item .nm{font-weight:600}.kb-item .mt{font-size:10px}
+.kb-item .mt-y{color:#2e7d32}.kb-item .mt-n{color:#c62828}
 .empty{text-align:center;color:#bbb;padding:50px 0;font-size:13px}
-.new-row-h{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
-.tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:10px;background:#e3f2fd;color:#1565c0}
-.raw-box{margin-top:8px;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden}
-.raw-hd{padding:6px 12px;background:#f5f5f5;cursor:pointer;font-size:11px;color:#666;display:flex;justify-content:space-between;align-items:center}
-.raw-hd:hover{background:#eee}
-.raw-ct{display:none;padding:10px 12px;font-size:11px;line-height:1.6;white-space:pre-wrap;color:#555;background:#fafafa;max-height:300px;overflow-y:auto;border-top:1px solid #e0e0e0}
-.raw-ct.show{display:block}
 </style>
 </head>
 <body>
 <div class="hdr">
-  <div><h1>🔍 数据建模识别智能体</h1><p>多元素并发识别 · 流式进度 · 手动纠正 · 知识库学习</p></div>
-  <div style="display:flex;align-items:center;gap:12px">
-    <div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;opacity:.8">🧠 模型</span><select id="modelSel" style="padding:4px 10px;border-radius:5px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;font-size:11px;cursor:pointer;outline:none"><option>加载中...</option></select></div>
+  <div><h1>🔍 数据建模识别智能体</h1><p>多元素并发识别 · 流式思考 · 手动纠正 · 知识库学习</p></div>
+  <div class="hdr-right">
+    <div class="model-sel-wrap"><label>🧠</label><select id="modelSel"><option>加载中...</option></select></div>
     <div class="nav">
-      <button class="on" onclick="showPg('tasks')">📊 识别任务</button>
-      <button onclick="showPg('single')">🔎 单个分析</button>
+      <button class="on" onclick="showPg('tasks')">📊 识别</button>
+      <button onclick="showPg('single')">🔎 单个</button>
       <button onclick="showPg('rules')">📖 规则</button>
       <button onclick="showPg('kb')">📚 知识库</button>
     </div>
   </div>
 </div>
-<div class="wrap">
-  <div class="pg on" id="pg-tasks">
-    <button class="btn btn-o" style="width:100%;padding:12px;margin-bottom:14px;border-style:dashed" onclick="newTask()">➕ 新建识别任务</button>
-    <div id="taskList"></div>
-    <div id="emptyHint" class="empty">点击上方按钮创建新的识别任务<br>支持同时运行多个不同元素类型的任务</div>
-  </div>
-  <div class="pg" id="pg-single">
-    <div class="card" style="max-width:700px">
-      <h3>选择元素类型</h3>
-      <div class="type-sel" id="sTypeRow"></div>
-      <h3 style="margin:10px 0 4px">输入事物名称</h3>
-      <div class="single-in">
-        <input id="sItem" placeholder="如：采购订单、币种..." onkeydown="if(event.key==='Enter')doSingle()">
-        <button class="btn btn-p" id="sBtn" onclick="doSingle()">分析</button>
+<div class="main-layout">
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sb-hd">
+      <span>📋 任务列表</span>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="sb-new" onclick="newTask()">+ 新建</button>
+        <button class="sb-toggle" onclick="toggleSidebar()" title="折叠/展开">◀</button>
       </div>
-      <div class="single-res" id="sRes" style="display:none"></div>
     </div>
+    <div class="sb-body" id="sbList"></div>
+    <div class="sb-ft">共 <span id="sbCount">0</span> 个任务</div>
   </div>
-  <div class="pg" id="pg-rules">
-    <div class="card"><h3>📋 各元素类型识别规则</h3><div class="rules-tabs" id="rTabs"></div><div class="rules-ct" id="rCt">加载中...</div></div>
-  </div>
-  <div class="pg" id="pg-kb">
-    <div class="card">
-      <h3>📚 知识库管理 <span style="font-weight:400;font-size:11px;color:#999">手动添加/编辑已确认的示例，AI下次识别时会自动参考</span></h3>
-      <div class="add-form">
-        <select id="kbType"></select>
-        <input id="kbItem" placeholder="事物名称">
-        <select id="kbMatch"><option value="true">✅ 是</option><option value="false">❌ 不是</option></select>
-        <input id="kbReason" placeholder="理由（可选）" style="flex:1;min-width:150px">
-        <button class="btn btn-p btn-s" onclick="addKB()">添加</button>
+  <!-- Content -->
+  <div class="content">
+    <div class="pg on" id="pg-tasks">
+      <div id="taskArea">
+        <div id="emptyHint" class="empty" style="padding:100px 0">
+          <div style="font-size:48px;margin-bottom:16px">🔍</div>
+          <div style="font-size:15px;color:#888;margin-bottom:8px">点击左侧「+ 新建」创建识别任务</div>
+          <div style="font-size:12px;color:#bbb">上传Excel文件，AI实时分析识别结果</div>
+        </div>
       </div>
-      <div id="kbList"></div>
+    </div>
+    <div class="pg" id="pg-single">
+      <div class="card" style="max-width:700px">
+        <h3>选择元素类型</h3>
+        <div id="sTypeRow" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:10px"></div>
+        <h3 style="margin:10px 0 4px">输入事物名称</h3>
+        <div class="single-in">
+          <input id="sItem" placeholder="如：采购订单、币种..." onkeydown="if(event.key==='Enter')doSingle()">
+          <button class="btn btn-p" id="sBtn" onclick="doSingle()">分析</button>
+        </div>
+        <div class="single-res" id="sRes" style="display:none"></div>
+      </div>
+    </div>
+    <div class="pg" id="pg-rules">
+      <div class="card"><h3>📋 各元素类型识别规则</h3><div class="rules-tabs" id="rTabs"></div><div class="rules-ct" id="rCt">加载中...</div></div>
+    </div>
+    <div class="pg" id="pg-kb">
+      <div class="card">
+        <h3>📚 知识库管理 <span style="font-weight:400;font-size:11px;color:#999">手动添加/编辑已确认的示例</span></h3>
+        <div class="add-form">
+          <select id="kbType"></select>
+          <input id="kbItem" placeholder="事物名称">
+          <select id="kbMatch"><option value="true">✅ 是</option><option value="false">❌ 不是</option></select>
+          <input id="kbReason" placeholder="理由（可选）" style="flex:1;min-width:150px">
+          <button class="btn btn-p btn-s" onclick="addKB()">添加</button>
+        </div>
+        <div id="kbList"></div>
+      </div>
     </div>
   </div>
 </div>
 <script>
-let ET=[], RN={}, tid=0, tasks={}, sType='业务对象', allRules={}, kbData={};
+let ET=[], RN={}, tid=0, tasks={}, activeTaskId=null, sType='业务对象', allRules={}, kbData={};
 function getModelId(){return document.getElementById('modelSel')?.value||null}
 
 // ============ INIT ============
 async function init(){
   const[tr,rr,mr]=await Promise.all([fetch('/api/element-types').then(r=>r.json()),fetch('/api/rules').then(r=>r.json()),fetch('/api/models').then(r=>r.json())]);
   ET=tr.types||[];RN=tr.rule_names||{};sType=ET[0]||'';allRules=rr.rules||{};
-  // 模型选择器
   const ms=document.getElementById('modelSel');ms.innerHTML='';
   (mr.models||[]).forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;if(m.id===mr.default)o.selected=true;ms.appendChild(o)});
-  // single type
   const sr=document.getElementById('sTypeRow');
   ET.forEach(t=>{const c=document.createElement('button');c.className='chip'+(t===sType?' on':'');c.textContent=t;c.onclick=()=>{sr.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));c.classList.add('on');sType=t};sr.appendChild(c)});
-  // rules tabs
   const rt=document.getElementById('rTabs');let first=true;
   for(const[t,txt]of Object.entries(allRules)){const b=document.createElement('button');b.className='rules-tab'+(first?' on':'');b.textContent=t;b.onclick=()=>{rt.querySelectorAll('.rules-tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('rCt').textContent=txt};rt.appendChild(b);if(first){document.getElementById('rCt').textContent=txt;first=false}}
-  // kb type select
   const ks=document.getElementById('kbType');ET.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;ks.appendChild(o)});
   loadKB();
 }
 function showPg(n){document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('on'));document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));document.querySelector(`.nav button:nth-child(${n==='tasks'?1:n==='single'?2:n==='rules'?3:4})`).classList.add('on');document.getElementById('pg-'+n).classList.add('on');if(n==='kb')loadKB()}
+function toggleSidebar(){const sb=document.getElementById('sidebar');sb.classList.toggle('collapsed');const btn=sb.querySelector('.sb-toggle');btn.textContent=sb.classList.contains('collapsed')?'▶':'◀'}
+
+// ============ SIDEBAR ============
+function renderSidebar(){
+  const list=document.getElementById('sbList');
+  let h='';
+  const ids=Object.keys(tasks).sort((a,b)=>b-a);
+  ids.forEach(id=>{
+    const t=tasks[id];
+    const sm={config:'配置中',select:'选择列',running:'识别中',done:'已完成',error:'错误'};
+    const bc={config:'sb-b-config',select:'sb-b-config',running:'sb-b-running',done:'sb-b-done',error:'sb-b-error'};
+    const title=t.file?t.file.replace(/\.xlsx?$/i,''):('任务 #'+t.id);
+    h+=`<div class="sb-item${activeTaskId==id?' active':''}" onclick="selectTask(${id})"><span class="sb-title">${esc(title)}</span><span class="sb-badge ${bc[t.st]||''}">${sm[t.st]||t.st}</span></div>`;
+  });
+  list.innerHTML=h;
+  document.getElementById('sbCount').textContent=ids.length;
+}
+function selectTask(id){
+  activeTaskId=id;
+  renderSidebar();
+  render(tasks[id]);
+  showPg('tasks');
+}
 
 // ============ TASKS ============
 function newTask(){
   const id=++tid;
   tasks[id]={id,st:'config',et:ET[0]||'',file:'',fp:'',sheets:[],selSheet:null,pairs:[],_nextPid:0};
+  activeTaskId=id;
   document.getElementById('emptyHint').style.display='none';
+  renderSidebar();
   render(tasks[id]);
+  showPg('tasks');
 }
-function rmTask(id){document.getElementById('task-'+id)?.remove();delete tasks[id];if(!Object.keys(tasks).length)document.getElementById('emptyHint').style.display=''}
+function rmTask(id){
+  delete tasks[id];
+  if(activeTaskId==id){
+    activeTaskId=Object.keys(tasks).length?Math.max(...Object.keys(tasks).map(Number)):null;
+  }
+  renderSidebar();
+  if(activeTaskId&&tasks[activeTaskId])render(tasks[activeTaskId]);
+  else{document.getElementById('taskArea').innerHTML='<div id="emptyHint" class="empty" style="padding:100px 0"><div style="font-size:48px;margin-bottom:16px">🔍</div><div style="font-size:15px;color:#888">点击左侧「+ 新建」创建识别任务</div></div>'}
+}
 function render(t){
   let el=document.getElementById('task-'+t.id);
-  if(!el){el=document.createElement('div');el.id='task-'+t.id;el.className='card';document.getElementById('taskList').prepend(el)}
+  const area=document.getElementById('taskArea');
+  if(!el){
+    // hide empty hint
+    const eh=document.getElementById('emptyHint');if(eh)eh.style.display='none';
+    el=document.createElement('div');el.id='task-'+t.id;el.className='card';
+    area.innerHTML='';area.appendChild(el);
+  }
   const sm={config:'配置中',select:'选择列',running:'识别中',done:'已完成',error:'错误'};
   const sc={config:'bdg-u',select:'bdg-u',running:'bdg-u',done:'bdg-y',error:'bdg-n'};
   let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:14px;font-weight:600">🔍 任务 #${t.id} ${t.file?'- '+esc(t.file):''}</div><div style="display:flex;align-items:center;gap:6px"><span class="bdg ${sc[t.st]||'bdg-u'}">${sm[t.st]||t.st}</span><button style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc" onclick="rmTask(${t.id})">✕</button></div></div>`;
@@ -183,22 +270,18 @@ function render(t){
   el.innerHTML=h;
 }
 function rConfig(t){
-  let h='<div style="font-size:12px;color:#666;margin-bottom:6px">选择默认元素类型：</div><div class="type-sel">';
+  let h='<div style="font-size:12px;color:#666;margin-bottom:6px">选择默认元素类型：</div><div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:10px">';
   ET.forEach(e=>{h+=`<button class="chip${e===t.et?' on':''}" onclick="tSetType(${t.id},'${e}')">${e}</button>`});
   h+=`</div><div class="upload-z" onclick="document.getElementById('f${t.id}').click()"><div class="ic">📁</div><div>点击或拖拽上传 <b>.xlsx</b></div><p>上传后展示所有子表和列，支持多列同时识别</p></div><input type="file" id="f${t.id}" accept=".xlsx,.xls" style="display:none" onchange="doUpload(${t.id},this)">`;
   return h;
 }
 function rSelect(t){
-  const rec=t.aiRec||{};
   let h=`<div style="font-size:12px;margin-bottom:8px"><b>选择子表：</b></div><div class="sh-tabs">`;
-  t.sheets.forEach(s=>{
-    h+=`<button class="sh-tab${t.selSheet===s.name?' on':''}" onclick="selSheet(${t.id},'${esc(s.name)}')">${esc(s.name)} (${s.rows}行)</button>`;
-  });
+  t.sheets.forEach(s=>{h+=`<button class="sh-tab${t.selSheet===s.name?' on':''}" onclick="selSheet(${t.id},'${esc(s.name)}')">${esc(s.name)} (${s.rows}行)</button>`});
   h+=`</div>`;
   const sh=t.sheets.find(s=>s.name===t.selSheet);
   if(sh){
-    h+=`<div style="font-size:12px;margin-bottom:6px"><b>勾选要识别的列，并选择元素类型：</b></div>`;
-    h+=`<div class="col-list" style="max-height:340px">`;
+    h+=`<div style="font-size:12px;margin-bottom:6px"><b>勾选要识别的列，并选择元素类型：</b></div><div class="col-list" style="max-height:340px">`;
     sh.columns.forEach(c=>{
       const pair=t.pairs.find(p=>p.sheet===t.selSheet&&p.column===c.name);
       const checked=!!pair;
@@ -213,15 +296,12 @@ function rSelect(t){
     });
     h+=`</div>`;
   }
-  // summary of selected pairs
   if(t.pairs.length){
     h+=`<div style="margin-top:10px;padding:10px;background:#f0f7ff;border-radius:6px;font-size:12px">已选 <b>${t.pairs.length}</b> 列：`;
     t.pairs.forEach(p=>{h+=`<span class="tag" style="margin:2px">${esc(p.column)} → ${esc(p.elementType)}</span> `});
-    h+=`</div>`;
-    h+=`<div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-p" onclick="startAll(${t.id})">🚀 开始识别</button><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
+    h+=`</div><div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-p" onclick="startAll(${t.id})">🚀 开始识别</button><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
   }else{
-    h+=`<div style="margin-top:10px;color:#999;font-size:12px">请勾选至少一列进行识别</div>`;
-    h+=`<div style="margin-top:8px"><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
+    h+=`<div style="margin-top:10px;color:#999;font-size:12px">请勾选至少一列进行识别</div><div style="margin-top:8px"><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
   }
   return h;
 }
@@ -237,7 +317,6 @@ function rRunning(t){
     if(p.results&&p.results.length){
       h+=`<div style="margin-top:6px;display:flex;gap:4px"><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'all')">全部</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},true)">✅</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},false)">❌</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'unk')">⚠️</button><button class="btn btn-o btn-s" onclick="pExport(${t.id},${pi})">📥</button></div>`;
     }
-    // 始终渲染表格结构（即使无结果），保证SSE流式追加时tbody存在
     h+=`<div class="tb-w" style="margin-top:6px"><table class="rt"><thead><tr><th style="width:28px"></th><th style="width:30px">#</th><th>名称</th><th style="width:60px">结论</th><th style="width:46px">置信</th><th>理由</th><th style="width:70px">操作</th></tr></thead><tbody id="tb-${t.id}-${pi}">`;
     if(p.results&&p.results.length){
       const list=p._filter?p.results.filter(r=>p._filter==='unk'?r.is_bo===null:r.is_bo===p._filter):p.results;
@@ -246,83 +325,66 @@ function rRunning(t){
         const btxt=r.is_bo===true?'✅ 是':r.is_bo===false?'❌ 不是':'⚠️ 待定';
         const cc=r.confidence==='high'?'cf-h':r.confidence==='medium'?'cf-m':'cf-l';
         const ct=r.confidence==='high'?'高':r.confidence==='medium'?'中':'低';
-        h+=`<tr><td><button class="expand-btn" onclick="toggleDetail(this,${t.id},${pi},${ri})">▶</button></td><td>${ri+1}</td><td><b>${esc(r.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(r.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)" title="标记为正确">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)" title="标记为错误">✗</button></td></tr>`;
-        // hidden rules detail row
+        h+=`<tr><td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${ri+1}</td><td><b>${esc(r.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(r.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td></tr>`;
         h+=`<tr class="detail-row" style="display:none"><td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, r.rules_check)}</div></td></tr>`;
       });
     }
     h+=`</tbody></table></div>`;
-    // 思考过程区域
-    h+=`<div class="raw-box" id="raw-${t.id}-${pi}"><div class="raw-hd" onclick="toggleRaw(this)"><span>🧠 思考过程 <span id="thinking-status-${t.id}-${pi}" style="color:#1a73e8;font-weight:600"></span></span><span class="raw-arrow">▶</span></div><div class="raw-ct show" id="rawct-${t.id}-${pi}"></div></div>`;
+    // 思考过程区域 - 显示存储的思考文本
+    const thinkText = p.thinkingText || '';
+    const thinkStatus = p.thinkingDone ? '✅ 思考完成' : (p.status==='running' ? '思考中...' : '');
+    h+=`<div class="think-box"><div class="think-hd" onclick="toggleThink(this)"><span>🧠 思考过程 <span style="color:#1a73e8;font-weight:600">${thinkStatus}</span></span><span class="raw-arrow">${thinkText?'▼':'▶'}</span></div><div class="think-ct${thinkText?'':' hidden'}" id="thinkct-${t.id}-${pi}">${thinkText?formatThinking(thinkText):'<span style="color:#bbb">等待AI思考...</span>'}</div></div>`;
     h+=`</div>`;
   });
-  if(t.st==='done')h+=`<button class="btn btn-o" style="margin-top:8px" onclick="tReset(${t.id})">🔄 新建任务</button>`;
+  if(t.st==='done')h+=`<div style="margin-top:12px;display:flex;gap:8px"><button class="btn btn-p" onclick="newTask()">➕ 新建任务</button><button class="btn btn-o" onclick="tReset(${t.id})">🔄 重新配置</button></div>`;
   return h;
 }
 
 // ============ TASK ACTIONS ============
 function tSetType(id,t){tasks[id].et=t;render(tasks[id])}
-function tReset(id){const t=tasks[id];t.st='config';t.pairs=[];t.sheets=[];t.error=null;render(t)}
+function tReset(id){const t=tasks[id];t.st='config';t.pairs=[];t.sheets=[];t.error=null;render(t);renderSidebar()}
 function selSheet(id,name){tasks[id].selSheet=name;render(tasks[id])}
 
 async function doUpload(id,inp){
   const f=inp.files[0];if(!f)return;
   const t=tasks[id];t.file=f.name;
   inp.previousElementSibling.innerHTML=`<div class="ic">⏳</div><div>解析中...</div>`;
+  renderSidebar();
   const fd=new FormData();fd.append('file',f);
   try{
     const r=await fetch('/api/parse-excel',{method:'POST',body:fd});
     const d=await r.json();
-    if(d.error){t.st='error';t.error=d.error;render(t);return}
+    if(d.error){t.st='error';t.error=d.error;render(t);renderSidebar();return}
     t.sheets=d.sheets||[];t.fp=d.file_path;t.aiRec=d.ai_recommendation||{};
     t.selSheet=d.ai_recommendation?.sheet||(d.sheets[0]?.name)||'';
-    // auto-add AI recommended pairs
     const sh=t.sheets.find(s=>s.name===t.selSheet);
     if(sh){sh.columns.forEach(c=>{if(c.recommended_type){addPairSilent(t,c.name,c.recommended_type)}})}
     t.st='select';
   }catch(e){t.st='error';t.error='解析失败: '+e.message}
-  render(t);
+  render(t);renderSidebar();
 }
 
 function addPairSilent(t,col,type){
   if(t.pairs.some(p=>p.sheet===t.selSheet&&p.column===col))return;
-  t.pairs.push({sheet:t.selSheet,column:col,elementType:type||t.et,items:[],results:[],summary:null,status:'pending',_filter:null});
-}
-function addPair(id,col){
-  const t=tasks[id];
-  const sh=t.sheets.find(s=>s.name===t.selSheet);
-  const c=sh?.columns.find(x=>x.name===col);
-  const rtype=c?.recommended_type||t.et;
-  addPairSilent(t,col,rtype);render(t);
+  t.pairs.push({sheet:t.selSheet,column:col,elementType:type||t.et,items:[],results:[],summary:null,status:'pending',_filter:null,thinkingText:'',thinkingDone:false,modelName:null});
 }
 function toggleCol(id,col,checked){
   const t=tasks[id];
-  if(checked){
-    const sh=t.sheets.find(s=>s.name===t.selSheet);
-    const c=sh?.columns.find(x=>x.name===col);
-    const rtype=c?.recommended_type||t.et;
-    addPairSilent(t,col,rtype);
-  }else{
-    t.pairs=t.pairs.filter(p=>!(p.sheet===t.selSheet&&p.column===col));
-  }
+  if(checked){const sh=t.sheets.find(s=>s.name===t.selSheet);const c=sh?.columns.find(x=>x.name===col);addPairSilent(t,col,c?.recommended_type||t.et)}
+  else{t.pairs=t.pairs.filter(p=>!(p.sheet===t.selSheet&&p.column===col))}
   render(t);
 }
-function rmPair(id,i){tasks[id].pairs.splice(i,1);render(tasks[id])}
 function pairType(id,i,t){tasks[id].pairs[i].elementType=t;render(tasks[id])}
 
 async function startAll(id){
-  const t=tasks[id];t.st='running';render(t);
-  // fetch column values and start SSE for each pair
+  const t=tasks[id];t.st='running';render(t);renderSidebar();
   const promises=t.pairs.map(async(p,pi)=>{
-    p.status='running';p.results=[];p.summary=null;p.rawResponses=[];p.modelName=null;
+    p.status='running';p.results=[];p.summary=null;p.thinkingText='';p.thinkingDone=false;p.modelName=null;
     try{
       const vr=await fetch(`/api/column-values?file_path=${encodeURIComponent(t.fp)}&sheet=${encodeURIComponent(p.sheet)}&column=${encodeURIComponent(p.column)}`);
       const vd=await vr.json();p.items=vd.values||[];
     }catch(e){p.items=[];p.status='error';return}
-    if(!p.items.length){p.status='done';p.summary={total:0,is_bo:0,not_bo:0,unknown:0};return}
-    // update UI to show progress
-    updatePairUI(t,pi);
-    // SSE
+    if(!p.items.length){p.status='done';p.summary={total:0,is_bo:0,not_bo:0,unknown:0};p.thinkingDone=true;return}
     try{
       const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:5,model_id:getModelId()})});
       const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
@@ -334,27 +396,68 @@ async function startAll(id){
           if(!line.startsWith('data: '))continue;
           try{
             const ev=JSON.parse(line.slice(6));
-            if(ev.type==='start'){p.modelName=ev.model_name;updatePairUI(t,pi)}
+            if(ev.type==='start'){
+              p.modelName=ev.model_name;
+              updatePairHeader(t,pi);
+            }
             else if(ev.type==='result'){p.results.push(ev);appendResultRow(t,pi,ev)}
-            else if(ev.type==='thinking_start'){appendThinkingBatch(t,pi,ev.batch_index)}
-            else if(ev.type==='thinking'){appendThinkingToken(t,pi,ev.token)}
-            else if(ev.type==='thinking_end'){endThinkingBatch(t,pi)}
-            else if(ev.type==='raw_response'){p.rawResponses.push(ev.raw);appendRawResponse(t,pi,ev)}
-            else if(ev.type==='progress'){updatePairProgress(t,pi,ev)}
-            else if(ev.type==='done'){p.summary=ev.summary;p.status='done'}
+            else if(ev.type==='thinking_start'){
+              const ct=getThinkCt(t,pi);
+              if(ct){
+                if(!p.thinkingText){ct.innerHTML='';/* clear placeholder */}
+                p._thinkBatchSpan=document.createElement('div');
+                p._thinkBatchSpan.style.cssText='margin-top:8px;padding-top:6px;border-top:1px dashed #e0e0e0';
+                p._thinkBatchSpan.innerHTML=`<b style="color:#1a73e8;font-size:11px">🧠 批次 ${ev.batch_index+1} 思考中...</b><br>`;
+                ct.appendChild(p._thinkBatchSpan);
+                ct.scrollTop=ct.scrollHeight;
+                // update header status
+                updateThinkStatus(t,pi,'思考中...');
+                // ensure visible
+                const box=ct.closest('.think-box');if(box){const c2=box.querySelector('.think-ct');if(c2&&c2.classList.contains('hidden')){c2.classList.remove('hidden');const ar=box.querySelector('.raw-arrow');if(ar)ar.textContent='▼'}}
+              }
+            }
+            else if(ev.type==='thinking'){
+              p.thinkingText+=ev.token;
+              if(p._thinkBatchSpan){
+                p._thinkBatchSpan.appendChild(document.createTextNode(ev.token));
+                const ct=getThinkCt(t,pi);
+                if(ct)ct.scrollTop=ct.scrollHeight;
+              }
+            }
+            else if(ev.type==='thinking_end'){
+              if(p._thinkBatchSpan){
+                const b=p._thinkBatchSpan.querySelector('b');
+                if(b)b.textContent=b.textContent.replace('思考中...','✅ 完成');
+              }
+              p._thinkBatchSpan=null;
+            }
+            else if(ev.type==='progress'){
+              const el=document.getElementById(`pf-${t.id}-${pi}`);
+              if(el){const pct=ev.total>0?Math.round(ev.current/ev.total*100):0;el.style.width=pct+'%'}
+            }
+            else if(ev.type==='done'){p.summary=ev.summary;p.status='done';p.thinkingDone=true;updateThinkStatus(t,pi,'✅ 思考完成')}
           }catch(e){}
         }
       }
-    }catch(e){p.status='error'}
+    }catch(e){p.status='error';p.thinkingDone=true}
   });
   await Promise.all(promises);
-  t.st='done';render(t);
+  t.st='done';render(t);renderSidebar();
 }
 
-function updatePairUI(t,pi){
+function getThinkCt(t,pi){return document.getElementById(`thinkct-${t.id}-${pi}`)}
+function updateThinkStatus(t,pi,text){
+  const box=document.getElementById(`pair-${t.id}-${pi}`);
+  if(!box)return;
+  const hd=box.querySelector('.think-hd span');
+  if(hd){
+    const s=hd.querySelector('span');
+    if(s)s.textContent=text;
+  }
+}
+function updatePairHeader(t,pi){
   const el=document.getElementById(`pair-${t.id}-${pi}`);if(!el)return;
   const p=t.pairs[pi];
-  // 更新模型名称标签
   if(p.modelName){
     const hd=el.querySelector('.pair-hd div');
     if(hd&&!hd.querySelector('[data-model]')){
@@ -365,53 +468,20 @@ function updatePairUI(t,pi){
     }
   }
 }
-function toggleRaw(hd){
+function toggleThink(hd){
   const ct=hd.nextElementSibling;const arrow=hd.querySelector('.raw-arrow');
-  ct.classList.toggle('show');
-  arrow.textContent=ct.classList.contains('show')?'▼':'▶';
+  ct.classList.toggle('hidden');
+  arrow.textContent=ct.classList.contains('hidden')?'▶':'▼';
 }
-function appendRawResponse(t,pi,ev){
-  const ct=document.getElementById(`rawct-${t.id}-${pi}`);if(!ct)return;
-  const p=t.pairs[pi];
-  if(p.rawResponses.length===1)ct.innerHTML='';
-  const div=document.createElement('div');
-  div.style.cssText='margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed #ddd';
-  div.innerHTML=`<b>批次 ${p.rawResponses.length}:</b>\n${esc(ev.raw)}`;
-  ct.appendChild(div);
-}
-let _thinkSpan=null;
-function appendThinkingBatch(t,pi,batchIdx){
-  const ct=document.getElementById(`rawct-${t.id}-${pi}`);if(!ct)return;
-  const status=document.getElementById(`thinking-status-${t.id}-${pi}`);
-  if(status)status.textContent=`思考中...`;
-  // 展开思考区域
-  const box=document.getElementById(`raw-${t.id}-${pi}`);
-  if(box){const c=box.querySelector('.raw-ct');if(c&&!c.classList.contains('show')){c.classList.add('show');const a=box.querySelector('.raw-arrow');if(a)a.textContent='▼'}}
-  _thinkSpan=document.createElement('span');
-  _thinkSpan.style.cssText='display:block;margin-top:6px;padding:4px 0;border-top:1px dashed #e0e0e0';
-  _thinkSpan.innerHTML=`<b style="color:#1a73e8;font-size:11px">🧠 批次 ${batchIdx+1} 思考中...</b><br>`;
-  ct.appendChild(_thinkSpan);
-  ct.scrollTop=ct.scrollHeight;
-}
-function appendThinkingToken(t,pi,token){
-  if(!_thinkSpan)return;
-  // 直接追加文本（不用esc，因为是流式输出）
-  _thinkSpan.appendChild(document.createTextNode(token));
-  const ct=document.getElementById(`rawct-${t.id}-${pi}`);
-  if(ct)ct.scrollTop=ct.scrollHeight;
-}
-function endThinkingBatch(t,pi){
-  const status=document.getElementById(`thinking-status-${t.id}-${pi}`);
-  if(status)status.textContent='✅ 思考完成';
-  if(_thinkSpan){
-    const b=_thinkSpan.querySelector('b');
-    if(b)b.textContent=b.textContent.replace('思考中...','思考完成');
-  }
-  _thinkSpan=null;
-}
-function updatePairProgress(t,pi,ev){
-  const el=document.getElementById(`pf-${t.id}-${pi}`);
-  if(el){const pct=ev.total>0?Math.round(ev.current/ev.total*100):0;el.style.width=pct+'%'}
+function formatThinking(text){
+  // hide JSON block
+  text = text.replace(/```json[\s\S]*?```/g, '');
+  text = text.replace(/\{[\s\S]*"results"[\s\S]*\}/g, '');
+  return esc(text.trim())
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`(.+?)`/g,'<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px">$1</code>')
+    .replace(/✓/g,'<span style="color:#2e7d32;font-weight:700">✓</span>')
+    .replace(/✗/g,'<span style="color:#c62828;font-weight:700">✗</span>');
 }
 function appendResultRow(t,pi,ev){
   const tb=document.getElementById(`tb-${t.id}-${pi}`);if(!tb)return;
@@ -421,14 +491,14 @@ function appendResultRow(t,pi,ev){
   const cc=ev.confidence==='high'?'cf-h':ev.confidence==='medium'?'cf-m':'cf-l';
   const ct=ev.confidence==='high'?'高':ev.confidence==='medium'?'中':'低';
   const tr1=document.createElement('tr');tr1.className='new';
-  tr1.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this,${t.id},${pi},${ri})">▶</button></td><td>${p.results.length}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
+  tr1.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${p.results.length}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
   const tr2=document.createElement('tr');tr2.className='detail-row';tr2.style.display='none';
   tr2.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
   tb.appendChild(tr1);tb.appendChild(tr2);
   tr1.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
-function toggleDetail(btn,tid,pi,ri){
+function toggleDetail(btn){
   const tr=btn.closest('tr');const detail=tr.nextElementSibling;
   if(detail&&detail.classList.contains('detail-row')){
     const show=detail.style.display==='none';
@@ -453,12 +523,12 @@ function pExport(id,pi){
 async function markCorrect(tid,pi,ri,isMatch){
   const t=tasks[tid];const p=t.pairs[pi];const r=p.results[ri];
   const reason=prompt(`标记「${r.item}」为${isMatch?'正确':'错误'}的理由（可选）：`);
-  if(reason===null)return; // cancelled
+  if(reason===null)return;
   try{
     await fetch('/api/correct',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item:r.item,element_type:p.elementType,original_result:r.is_bo,corrected_result:isMatch,reason:reason||''})});
     r.is_bo=isMatch;r.confidence='high';r.reason=(r.reason||'')+(reason?` [已纠正: ${reason}]`:' [已纠正]');
     render(t);
-    alert(`已保存到知识库：「${r.item}」${isMatch?'是':'不是'}${p.elementType}`);
+    alert(`已保存：「${r.item}」${isMatch?'是':'不是'}${p.elementType}`);
   }catch(e){alert('保存失败: '+e.message)}
 }
 
@@ -470,7 +540,7 @@ async function doSingle(){
   try{
     const res=await fetch('/api/check-single',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item,element_type:sType,model_id:getModelId()})});
     const reader=res.body.getReader();const dec=new TextDecoder();let full='';div.innerHTML='';
-    while(true){const{done,value}=await reader.read();if(done)break;const txt=dec.decode(value,{stream:true});for(const l of txt.split('\n')){if(!l.startsWith('data: '))continue;try{const d=JSON.parse(l.slice(6));if(d.content){full+=d.content;div.innerHTML=renderMd(full)}}catch(e){}}}
+    while(true){const{done,value}=await reader.read();if(done)break;const txt=dec.decode(value,{stream:true});for(const l of txt.split('\n')){if(!l.startsWith('data: '))continue;try{const d=JSON.parse(l.slice(6));if(d.content){full+=d.content;div.innerHTML=formatThinking(full)}}catch(e){}}}
   }catch(e){div.innerHTML=`<span style="color:red">失败: ${e.message}</span>`}
   btn.disabled=false;btn.textContent='分析';
 }
@@ -521,22 +591,18 @@ async function delKB(type,item){
 
 // ============ UTILS ============
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
-function renderMd(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`(.+?)`/g,'<code>$1</code>').replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>')}
 
-// 渲染逐条规则分析详情（始终列出所有规则）
 function renderRulesDetail(elementType, rulesCheck){
-  const allRules = RN[elementType] || [];
-  // 将LLM返回的rules_check转为map
+  const allR = RN[elementType] || [];
   const rcMap = {};
   if(rulesCheck && rulesCheck.length){
     rulesCheck.forEach(rc => {
-      // 模糊匹配规则名
-      const key = allRules.find(r => rc.rule && (r === rc.rule || r.includes(rc.rule) || rc.rule.includes(r))) || rc.rule;
+      const key = allR.find(r => rc.rule && (r === rc.rule || r.includes(rc.rule) || rc.rule.includes(r))) || rc.rule;
       rcMap[key] = rc;
     });
   }
   let h = '';
-  allRules.forEach(ruleName => {
+  allR.forEach(ruleName => {
     const rc = rcMap[ruleName];
     if(rc){
       const cls = rc.pass ? 'ri-pass' : 'ri-fail';
@@ -546,13 +612,11 @@ function renderRulesDetail(elementType, rulesCheck){
       h += `<div class="ri ri-unk"><div class="ri-icon">?</div><div class="ri-name">${esc(ruleName)}</div><div class="ri-reason" style="color:#999">AI未返回该条分析</div></div>`;
     }
   });
-  // LLM返回的但不在标准规则列表中的
   if(rulesCheck){
     rulesCheck.forEach(rc => {
-      if(rc.rule && !allRules.some(r => r === rc.rule || r.includes(rc.rule) || rc.rule.includes(r))){
+      if(rc.rule && !allR.some(r => r === rc.rule || r.includes(rc.rule) || rc.rule.includes(r))){
         const cls = rc.pass ? 'ri-pass' : 'ri-fail';
-        const icon = rc.pass ? '✓' : '✗';
-        h += `<div class="ri ${cls}"><div class="ri-icon">${icon}</div><div class="ri-name">${esc(rc.rule)}</div><div class="ri-reason">${esc(rc.reason||'')}</div></div>`;
+        h += `<div class="ri ${cls}"><div class="ri-icon">${rc.pass?'✓':'✗'}</div><div class="ri-name">${esc(rc.rule)}</div><div class="ri-reason">${esc(rc.reason||'')}</div></div>`;
       }
     });
   }

@@ -205,9 +205,18 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
             batch_idx = i // batch_size
             yield {"type": "thinking_start", "batch_index": batch_idx}
             full_response = ""
+            json_started = False
             for token in chat_stream(messages, temperature=0.1, model_id=model_id):
                 full_response += token
-                yield {"type": "thinking", "batch_index": batch_idx, "token": token}
+                # 检测JSON块开始，停止推送思考token
+                if not json_started:
+                    if '```json' in full_response or (full_response.count('{') > 0 and '"results"' in full_response):
+                        json_started = True
+                        # 去掉已累积的JSON前缀
+                        clean = full_response.split('```json')[0] if '```json' in full_response else full_response[:full_response.rfind('{')]
+                        # 不回溯已发送的token，只标记后续不再发
+                    else:
+                        yield {"type": "thinking", "batch_index": batch_idx, "token": token}
             yield {"type": "thinking_end", "batch_index": batch_idx}
 
             # 解析完整响应
