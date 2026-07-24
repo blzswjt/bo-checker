@@ -449,7 +449,10 @@ async function startAll(id){
     }catch(e){p.status='error';p.thinkingDone=true}
   });
   await Promise.all(promises);
-  t.st='done';render(t);renderSidebar();
+  t.st='done';
+  // 只在当前查看的仍是该任务时才渲染，避免覆盖正在查看的其他任务
+  if(activeTaskId==t.id){render(t)}
+  renderSidebar();
 }
 
 function getThinkCt(t,pi){return document.getElementById(`thinkct-${t.id}-${pi}`)}
