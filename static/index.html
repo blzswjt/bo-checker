@@ -408,6 +408,7 @@ async function startAll(id){
               updatePairHeader(t,pi);
             }
             else if(ev.type==='result'){p.results.push(ev);appendResultRow(t,pi,ev)}
+            else if(ev.type==='result_update'){updateResultRow(t,pi,ev)}
             else if(ev.type==='thinking_start'){
               const ct=getThinkCt(t,pi);
               if(ct){
@@ -506,6 +507,34 @@ function appendResultRow(t,pi,ev){
   tr2.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
   tb.appendChild(tr1);tb.appendChild(tr2);
   tr1.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function updateResultRow(t,pi,ev){
+  const p=t.pairs[pi];
+  // 找到对应的结果（按item名称匹配）
+  let ri=-1;
+  for(let k=0;k<p.results.length;k++){if(p.results[k].item===ev.item){ri=k;break}}
+  if(ri<0)return;
+  // 更新存储的数据
+  p.results[ri].is_bo=ev.is_bo;
+  p.results[ri].confidence=ev.confidence;
+  p.results[ri].reason=ev.reason;
+  p.results[ri].rules_check=ev.rules_check||[];
+  // 更新DOM
+  const tb=document.getElementById(`tb-${t.id}-${pi}`);if(!tb)return;
+  const rows=tb.querySelectorAll('tr:not(.detail-row)');
+  if(ri>=rows.length)return;
+  const tr1=rows[ri];
+  const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
+  const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
+  const cc=ev.confidence==='high'?'cf-h':ev.confidence==='medium'?'cf-m':'cf-l';
+  const ct=ev.confidence==='high'?'高':ev.confidence==='medium'?'中':'低';
+  tr1.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${ri+1}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
+  // 更新detail row
+  const detailRow=tr1.nextElementSibling;
+  if(detailRow&&detailRow.classList.contains('detail-row')){
+    detailRow.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
+  }
+  tr1.classList.add('new');
 }
 
 function toggleDetail(btn){

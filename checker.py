@@ -173,8 +173,8 @@ def _parse_streaming_conclusions(text: str, batch: list[str]):
     results = []
     for line in text.split('\n'):
         line_s = line.strip()
-        # 检测新事物开始: **1. 事物名** 或 **1. 事物名**
-        m = re.match(r'\*\*(\d+)[.\uff0e]\s*(.+?)\*\*', line_s)
+        # 检测新事物开始: **1. 事物名** 或 1. 事物名 （支持有/无粗体）
+        m = re.match(r'(?:\*\*)?(\d+)[.\uff0e]\s*(.+?)(?:\*\*)?$', line_s)
         if m:
             num = int(m.group(1))
             if 1 <= num <= len(batch):
@@ -270,28 +270,30 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
 
             yield {"type": "thinking_end", "batch_index": batch_idx}
 
-            # 解析完整JSON响应，补充未通过思考检测到的结果（含rules_check详情）
+            # 解析完整JSON响应，补充rules_check详情
             parsed = parse_llm_response(full_response, batch)
-            # 建立已发射结果映射
-            emitted_map = {}
-            for ar in all_results:
-                emitted_map[ar.get('item', '')] = True
 
             for j, result in enumerate(parsed):
                 item_name = result.get("item", batch[j])
-                if item_name not in emitted_map:
-                    # 这个结果还没发射，立即发射（含rules_check）
-                    all_results.append(result)
-                    yield {
-                        "type": "result",
-                        "index": i + j,
-                        "item": item_name,
-                        "is_bo": result.get("is_bo"),
-                        "confidence": result.get("confidence", "low"),
-                        "reason": result.get("reason", ""),
-                        "rules_check": result.get("rules_check", []),
-                    }
-                # 如果已经通过思考发射过了，跳过（JSON结果中的rules_check会在后续更新）
+                full_result = {
+                    "item": item_name,
+                    "is_bo": result.get("is_bo"),
+                    "confidence": result.get("confidence", "low"),
+                    "reason": result.get("reason", ""),
+                    "rules_check": result.get("rules_check", []),
+                }
+                if j in emitted_indices:
+                    # 已通过思考发射过，发送更新事件补充rules_check
+                    # 更新all_results中的记录
+                    for ar in all_results:
+                        if ar.get('item') == item_name:
+                            ar.update(full_result)
+                            break
+                    yield {"type": "result_update", "index": i + j, **full_result}
+                else:
+                    # 未发射过，正常发射
+                    all_results.append(full_result)
+                    yield {"type": "result", "index": i + j, **full_result}
 
         except Exception as e:
             for j, item in enumerate(batch):
