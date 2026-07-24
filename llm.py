@@ -67,11 +67,19 @@ def _get_client(model_id: str):
     if model_id not in _clients:
         cfg = _get_model_config(model_id)
         if cfg["provider"] == "ark":
-            from volcenginesdkarkruntime import Ark
-            _clients[model_id] = Ark(
-                api_key=cfg["api_key"],
-                base_url=cfg["base_url"],
-            )
+            try:
+                from volcenginesdkarkruntime import Ark
+                _clients[model_id] = Ark(
+                    api_key=cfg["api_key"],
+                    base_url=cfg["base_url"],
+                )
+            except (ImportError, AttributeError):
+                # 回退到 openai SDK（同样兼容 Ark API）
+                from openai import OpenAI
+                _clients[model_id] = OpenAI(
+                    api_key=cfg["api_key"],
+                    base_url=cfg["base_url"],
+                )
         else:
             from openai import OpenAI
             _clients[model_id] = OpenAI(

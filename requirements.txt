@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 openai
-volcenginesdkarkruntime
+volcenginesdkarkruntime>=0.0.1
 python-dotenv
 openpyxl
 pandas
