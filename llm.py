@@ -1,8 +1,8 @@
 """
-LLM 客户端封装 - OpenAI 兼容接口
+LLM 客户端封装 - 火山引擎方舟 (Ark) SDK
 """
 import os
-from openai import OpenAI
+from volcenginesdkarkruntime import Ark
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -11,10 +11,10 @@ load_dotenv(Path(__file__).parent / ".env")
 _client = None
 
 
-def get_client() -> OpenAI:
+def get_client() -> Ark:
     global _client
     if _client is None:
-        _client = OpenAI(
+        _client = Ark(
             api_key=os.getenv("LLM_API_KEY"),
             base_url=os.getenv("LLM_BASE_URL"),
         )
@@ -22,7 +22,7 @@ def get_client() -> OpenAI:
 
 
 def get_model() -> str:
-    return os.getenv("LLM_MODEL", "qwen-plus-latest")
+    return os.getenv("LLM_MODEL", "doubao-seed-evolving")
 
 
 def chat(messages: list[dict], temperature: float = 0.3) -> str:
