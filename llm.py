@@ -61,6 +61,13 @@ def get_default_model_id() -> str:
     return _default_model_id
 
 
+def get_model_display_name(model_id: str = None) -> str:
+    """获取模型的显示名称"""
+    mid = model_id or _default_model_id
+    cfg = _get_model_config(mid)
+    return cfg.get("name", mid)
+
+
 def _get_model_config(model_id: str) -> dict:
     """根据model_id获取模型配置"""
     for m in MODELS:

@@ -84,7 +84,11 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .empty{text-align:center;color:#bbb;padding:50px 0;font-size:13px}
 .new-row-h{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
 .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:10px;background:#e3f2fd;color:#1565c0}
-.tag .x{cursor:pointer;font-size:12px;color:#999}.tag .x:hover{color:#e53935}
+.raw-box{margin-top:8px;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden}
+.raw-hd{padding:6px 12px;background:#f5f5f5;cursor:pointer;font-size:11px;color:#666;display:flex;justify-content:space-between;align-items:center}
+.raw-hd:hover{background:#eee}
+.raw-ct{display:none;padding:10px 12px;font-size:11px;line-height:1.6;white-space:pre-wrap;color:#555;background:#fafafa;max-height:300px;overflow-y:auto;border-top:1px solid #e0e0e0}
+.raw-ct.show{display:block}
 </style>
 </head>
 <body>
@@ -227,7 +231,7 @@ function rRunning(t){
     const total=p.items?.length||0;
     const done=p.results?.length||0;
     const pct=total>0?Math.round(done/total*100):0;
-    h+=`<div class="pair" id="pair-${t.id}-${pi}"><div class="pair-hd"><span class="pair-title">📋 ${esc(p.column)} → ${esc(p.elementType)}</span><span class="bdg ${p.status==='done'?'bdg-y':'bdg-u'}" style="font-size:10px">${p.status==='done'?'完成':p.status==='running'?`${done}/${total}`:'等待'}</span></div>`;
+    h+=`<div class="pair" id="pair-${t.id}-${pi}"><div class="pair-hd"><span class="pair-title">📋 ${esc(p.column)} → ${esc(p.elementType)}</span><div style="display:flex;align-items:center;gap:6px">${p.modelName?`<span style="font-size:10px;padding:2px 8px;background:#e3f2fd;color:#1565c0;border-radius:4px">🧠 ${esc(p.modelName)}</span>`:''}<span class="bdg ${p.status==='done'?'bdg-y':'bdg-u'}" style="font-size:10px">${p.status==='done'?'完成':p.status==='running'?`${done}/${total}`:'等待'}</span></div></div>`;
     h+=`<div class="prog-t"><div class="prog-f" id="pf-${t.id}-${pi}" style="width:${pct}%"></div></div><div class="prog-txt"><span>${done<total?'⏳ 分析中...':'✅ 完成'}</span><span>${pct}%</span></div>`;
     if(p.summary){const s=p.summary;h+=`<div class="stats"><div class="st st-t"><div class="n">${s.total}</div><div class="l">总计</div></div><div class="st st-y"><div class="n">${s.is_bo}</div><div class="l">✅ 是</div></div><div class="st st-n"><div class="n">${s.not_bo}</div><div class="l">❌ 不是</div></div><div class="st st-u"><div class="n">${s.unknown}</div><div class="l">⚠️ 待人工</div></div></div>`}
     if(p.results&&p.results.length){
@@ -248,6 +252,8 @@ function rRunning(t){
       });
     }
     h+=`</tbody></table></div>`;
+    // 推理过程区域
+    h+=`<div class="raw-box" id="raw-${t.id}-${pi}"><div class="raw-hd" onclick="toggleRaw(this)"><span>🔬 推理过程 (AI原始输出)</span><span class="raw-arrow">▶</span></div><div class="raw-ct" id="rawct-${t.id}-${pi}">${(p.rawResponses||[]).map((r,i)=>`<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed #ddd"><b>批次 ${i+1}:</b>\n${esc(r)}</div>`).join('')||'<span style="color:#999">暂无数据</span>'}</div></div>`;
     h+=`</div>`;
   });
   if(t.st==='done')h+=`<button class="btn btn-o" style="margin-top:8px" onclick="tReset(${t.id})">🔄 新建任务</button>`;
@@ -308,7 +314,7 @@ async function startAll(id){
   const t=tasks[id];t.st='running';render(t);
   // fetch column values and start SSE for each pair
   const promises=t.pairs.map(async(p,pi)=>{
-    p.status='running';p.results=[];p.summary=null;
+    p.status='running';p.results=[];p.summary=null;p.rawResponses=[];p.modelName=null;
     try{
       const vr=await fetch(`/api/column-values?file_path=${encodeURIComponent(t.fp)}&sheet=${encodeURIComponent(p.sheet)}&column=${encodeURIComponent(p.column)}`);
       const vd=await vr.json();p.items=vd.values||[];
@@ -328,7 +334,9 @@ async function startAll(id){
           if(!line.startsWith('data: '))continue;
           try{
             const ev=JSON.parse(line.slice(6));
-            if(ev.type==='result'){p.results.push(ev);appendResultRow(t,pi,ev)}
+            if(ev.type==='start'){p.modelName=ev.model_name;updatePairUI(t,pi)}
+            else if(ev.type==='result'){p.results.push(ev);appendResultRow(t,pi,ev)}
+            else if(ev.type==='raw_response'){p.rawResponses.push(ev.raw);appendRawResponse(t,pi,ev)}
             else if(ev.type==='progress'){updatePairProgress(t,pi,ev)}
             else if(ev.type==='done'){p.summary=ev.summary;p.status='done'}
           }catch(e){}
@@ -341,8 +349,33 @@ async function startAll(id){
 }
 
 function updatePairUI(t,pi){
-  const el=document.getElementById(`pf-${t.id}-${pi}`);if(!el)return;
-  // minimal update without full re-render
+  const el=document.getElementById(`pair-${t.id}-${pi}`);if(!el)return;
+  const p=t.pairs[pi];
+  // 更新模型名称标签
+  if(p.modelName){
+    const hd=el.querySelector('.pair-hd div');
+    if(hd&&!hd.querySelector('[data-model]')){
+      const span=document.createElement('span');span.dataset.model='1';
+      span.style.cssText='font-size:10px;padding:2px 8px;background:#e3f2fd;color:#1565c0;border-radius:4px';
+      span.textContent='🧠 '+p.modelName;
+      hd.insertBefore(span,hd.firstChild);
+    }
+  }
+}
+function toggleRaw(hd){
+  const ct=hd.nextElementSibling;const arrow=hd.querySelector('.raw-arrow');
+  ct.classList.toggle('show');
+  arrow.textContent=ct.classList.contains('show')?'▼':'▶';
+}
+function appendRawResponse(t,pi,ev){
+  const ct=document.getElementById(`rawct-${t.id}-${pi}`);if(!ct)return;
+  const p=t.pairs[pi];
+  // 清除“暂无数据”提示
+  if(p.rawResponses.length===1)ct.innerHTML='';
+  const div=document.createElement('div');
+  div.style.cssText='margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed #ddd';
+  div.innerHTML=`<b>批次 ${p.rawResponses.length}:</b>\n${esc(ev.raw)}`;
+  ct.appendChild(div);
 }
 function updatePairProgress(t,pi,ev){
   const el=document.getElementById(`pf-${t.id}-${pi}`);

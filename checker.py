@@ -9,7 +9,7 @@ import json
 import re
 import pandas as pd
 from pathlib import Path
-from llm import chat
+from llm import chat, get_model_display_name
 from rules import build_batch_prompt, build_check_prompt, ELEMENT_TYPES, recommend_element_type
 import kb
 
@@ -174,7 +174,8 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
     集成知识库示例，结果包含逐条规则分析(rules_check)。
     """
     total = len(items)
-    yield {"type": "start", "total": total, "element_type": element_type}
+    model_name = get_model_display_name(model_id)
+    yield {"type": "start", "total": total, "element_type": element_type, "model_id": model_id, "model_name": model_name}
 
     # 获取知识库示例
     kb_examples = kb.get_examples(element_type)
@@ -214,6 +215,8 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                     "reason": result.get("reason", ""),
                     "rules_check": result.get("rules_check", []),
                 }
+            # 每批次发送原始推理过程
+            yield {"type": "raw_response", "batch_index": i, "raw": response}
         except Exception as e:
             for j, item in enumerate(batch):
                 result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"AI分析出错: {str(e)}", "rules_check": []}
