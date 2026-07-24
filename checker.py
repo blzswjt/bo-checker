@@ -245,6 +245,7 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
             full_response = ""
             json_started = False
             emitted_indices = set()  # 已经通过思考解析发射的结果索引
+            _last_parse_len = 0  # 上次解析到的位置，避免重复解析
 
             for token in chat_stream(messages, temperature=0.1, model_id=model_id):
                 full_response += token
@@ -256,21 +257,25 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                         yield {"type": "thinking", "batch_index": batch_idx, "token": token}
 
                     # 实时检测已完成的结论，立即发射结果
-                    conclusions = _parse_streaming_conclusions(full_response, batch)
-                    for c in conclusions:
-                        if c['conclusion'] and c['idx'] not in emitted_indices:
-                            emitted_indices.add(c['idx'])
-                            con = c['conclusion']
-                            item_name = batch[c['idx']]
-                            result = {
-                                "item": item_name,
-                                "is_bo": con['is_bo'],
-                                "confidence": con['confidence'],
-                                "reason": con['reason'],
-                                "rules_check": [],
-                            }
-                            all_results.append(result)
-                            yield {"type": "result", "index": i + c['idx'], **result}
+                    # 优化：只在有新完整行时才重新解析，避免O(n²)重解析
+                    last_nl = full_response.rfind('\n')
+                    if last_nl > _last_parse_len:
+                        _last_parse_len = last_nl
+                        conclusions = _parse_streaming_conclusions(full_response, batch)
+                        for c in conclusions:
+                            if c['conclusion'] and c['idx'] not in emitted_indices:
+                                emitted_indices.add(c['idx'])
+                                con = c['conclusion']
+                                item_name = batch[c['idx']]
+                                result = {
+                                    "item": item_name,
+                                    "is_bo": con['is_bo'],
+                                    "confidence": con['confidence'],
+                                    "reason": con['reason'],
+                                    "rules_check": [],
+                                }
+                                all_results.append(result)
+                                yield {"type": "result", "index": i + c['idx'], **result}
 
             yield {"type": "thinking_end", "batch_index": batch_idx}
 

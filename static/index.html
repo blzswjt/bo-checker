@@ -129,14 +129,20 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .view-toggle button{padding:3px 10px;border:none;border-radius:5px;cursor:pointer;font-size:10px;background:transparent;color:#888;transition:.2s}
 .view-toggle button.on{background:#1a73e8;color:#fff;font-weight:600}
 /* Matrix view */
-.mx-wrap{overflow-x:auto;border:1px solid #e0e0e0;border-radius:8px;margin-top:8px;background:#fff}
+.mx-wrap{overflow-x:auto;border:1px solid #e0e0e0;border-radius:8px;margin-top:8px;background:#fff;position:relative}
 .mx-table{border-collapse:collapse;font-size:11px;min-width:100%}
-.mx-table th{background:#f8f9fa;padding:5px 6px;font-weight:600;border-bottom:2px solid #e0e0e0;white-space:nowrap;text-align:center;font-size:10px;position:sticky;top:0;z-index:1}
-.mx-table th:first-child{text-align:left;position:sticky;left:0;z-index:2;background:#f8f9fa;min-width:120px}
-.mx-table td{padding:5px 6px;border-bottom:1px solid #f0f0f0;text-align:center;white-space:nowrap}
-.mx-table td:first-child{text-align:left;font-weight:600;position:sticky;left:0;background:#fff;z-index:1;min-width:120px;border-right:2px solid #e8e8e8}
+.mx-table th{background:#f8f9fa;padding:6px 8px;font-weight:600;border-bottom:2px solid #e0e0e0;text-align:center;font-size:10px;position:sticky;top:0;z-index:1;min-width:80px;user-select:none}
+.mx-table th:first-child{text-align:left;position:sticky;left:0;z-index:3;background:#f8f9fa;min-width:140px;white-space:nowrap}
+.mx-table td{padding:5px 8px;border-bottom:1px solid #f0f0f0;text-align:center;white-space:nowrap}
+.mx-table td:first-child{text-align:left;font-weight:600;position:sticky;left:0;background:#fff;z-index:1;min-width:140px;border-right:2px solid #e8e8e8}
 .mx-table tr:hover td{background:#f8faff}
 .mx-table tr:hover td:first-child{background:#f0f4ff}
+/* Column resize handle */
+.mx-th-inner{display:flex;align-items:center;justify-content:center;gap:2px;min-height:28px;line-height:1.3}
+.mx-th-text{word-break:break-all;font-size:10px}
+.mx-resize{position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize;z-index:5;background:transparent;transition:background .15s}
+.mx-resize:hover,.mx-resize.active{background:#1a73e8}
+.mx-table th{position:sticky;top:0;overflow:visible}
 .mx-c{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:700;transition:.15s}
 .mx-c:hover{transform:scale(1.2);box-shadow:0 2px 6px rgba(0,0,0,.15)}
 .mx-pass{background:#e8f5e9;color:#2e7d32}
@@ -300,6 +306,10 @@ function render(t){
   else if(t.st==='running'||t.st==='done')h+=rRunning(t);
   else if(t.st==='error')h+=`<div style="color:#e53935;font-size:12px">❌ ${esc(t.error||'')}</div><button class="btn btn-o" style="margin-top:8px" onclick="tReset(${t.id})">重新配置</button>`;
   el.innerHTML=h;
+  // 矩阵视图时初始化列宽拖拽
+  if(viewMode==='matrix'&&(t.st==='running'||t.st==='done')){
+    setTimeout(()=>{t.pairs.forEach((p,pi)=>{initMatrixResize(document.getElementById('mxwrap-'+t.id+'-'+pi))})},50);
+  }
 }
 function rConfig(t){
   let h='<div style="font-size:12px;color:#666;margin-bottom:6px">选择默认元素类型：</div><div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:10px">';
@@ -688,9 +698,9 @@ function renderMatrixView(t,pi){
     }
     return '<div style="color:#999;font-size:12px;padding:10px">暂无规则分析数据</div>';
   }
-  // Build matrix table
-  let h='<div class="mx-wrap"><table class="mx-table"><thead><tr><th>名称</th>';
-  allR.forEach(rn=>{h+=`<th title="${esc(rn)}">${esc(rn.length>4?rn.slice(0,4)+'..':rn)}</th>`});
+  // Build matrix table with resize handles
+  let h='<div class="mx-wrap" id="mxwrap-'+t.id+'-'+pi+'"><table class="mx-table" id="mxtbl-'+t.id+'-'+pi+'"><thead><tr><th style="position:sticky;left:0;z-index:3"><div class="mx-th-inner">名称</div></th>';
+  allR.forEach((rn,ri)=>{h+=`<th title="${esc(rn)}" style="position:relative"><div class="mx-th-inner"><span class="mx-th-text">${esc(rn)}</span></div><div class="mx-resize" data-col="${ri+1}"></div></th>`});
   h+='</tr></thead><tbody>';
   if(p.results&&p.results.length){
     p.results.forEach((r,ri)=>{
@@ -743,6 +753,38 @@ function showCellDetail(key){
   const passTxt=d.pass===true?'✅ 通过':d.pass===false?'❌ 不通过':'⚠️ 未分析';
   bg.innerHTML=`<div class="cell-modal"><h4>${esc(d.item)}</h4><div style="margin-bottom:8px"><b>规则：</b>${esc(d.rule)}</div><div style="margin-bottom:8px"><span class="${passCls}">${passTxt}</span></div><div style="margin-bottom:4px"><b>分析理由：</b></div><div style="color:#555;line-height:1.8;background:#f9f9f9;padding:10px;border-radius:6px">${esc(d.reason)||'<span style="color:#999">无详细分析</span>'}</div><button class="cm-close" onclick="this.closest('.cell-modal-bg').remove()">关闭</button></div>`;
   document.body.appendChild(bg);
+}
+
+// Column resize for matrix view
+function initMatrixResize(container){
+  if(!container)return;
+  container.querySelectorAll('.mx-resize').forEach(handle=>{
+    handle.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      const th=this.parentElement;
+      const table=th.closest('table');
+      const colIdx=Array.from(th.parentElement.children).indexOf(th);
+      const startX=e.pageX;
+      const startW=th.offsetWidth;
+      this.classList.add('active');
+      const onMove=function(e2){
+        const w=Math.max(40,startW+(e2.pageX-startX));
+        th.style.width=w+'px';th.style.minWidth=w+'px';
+        // Update all cells in this column
+        table.querySelectorAll('tr').forEach(tr=>{
+          const td=tr.children[colIdx];
+          if(td){td.style.width=w+'px';td.style.minWidth=w+'px'}
+        });
+      };
+      const onUp=function(){
+        handle.classList.remove('active');
+        document.removeEventListener('mousemove',onMove);
+        document.removeEventListener('mouseup',onUp);
+      };
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onUp);
+    });
+  });
 }
 
 function renderRulesDetail(elementType, rulesCheck){
