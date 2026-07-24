@@ -393,43 +393,89 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
     }
 
 
+def _extract_json_object(text: str, start_pos: int) -> str | None:
+    """从start_pos位置开始，通过花括号计数提取完整的JSON对象字符串"""
+    pos = start_pos
+    while pos < len(text) and text[pos] != '{':
+        pos += 1
+    if pos >= len(text):
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(pos, len(text)):
+        c = text[i]
+        if escape:
+            escape = False
+            continue
+        if c == '\\' and in_string:
+            escape = True
+            continue
+        if c == '"':
+            in_string = not in_string
+            continue
+        if not in_string:
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return text[pos:i + 1]
+    return None
+
+
 def parse_llm_response(response: str, items: list[str]) -> list[dict]:
     """解析 LLM 返回的结果，从混合文本中提取JSON"""
-    # 优先从 ```json 代码块中提取
-    json_block = re.search(r'```json\s*(\{[\s\S]*?"results"[\s\S]*?\})\s*```', response)
+    default_results = [{"item": item, "is_bo": None, "confidence": "low", "reason": "无法自动解析，请人工判断"} for item in items]
+
+    def _try_parse(json_str: str) -> list[dict] | None:
+        try:
+            data = json.loads(json_str)
+            results = data.get("results", [])
+            if len(results) == len(items):
+                return results
+            elif len(results) > 0:
+                result_map = {r.get("item", ""): r for r in results}
+                return [
+                    result_map.get(item, {"item": item, "is_bo": None, "confidence": "low", "reason": "未返回该项结果"})
+                    for item in items
+                ]
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return None
+
+    # 方案1：从 ```json 代码块中提取
+    json_block = re.search(r'```json\s*(\{[\s\S]*?\})\s*```', response)
     if json_block:
-        try:
-            data = json.loads(json_block.group(1))
-            results = data.get("results", [])
-            if len(results) == len(items):
-                return results
-            elif len(results) > 0:
-                result_map = {r.get("item", ""): r for r in results}
-                return [
-                    result_map.get(item, {"item": item, "is_bo": None, "confidence": "low", "reason": "未返回该项结果"})
-                    for item in items
-                ]
-        except json.JSONDecodeError:
-            pass
+        parsed = _try_parse(json_block.group(1))
+        if parsed is not None:
+            return parsed
 
-    # 回退：从全文中提取JSON
-    json_match = re.search(r'\{[\s\S]*"results"[\s\S]*\}', response)
-    if json_match:
-        try:
-            data = json.loads(json_match.group())
-            results = data.get("results", [])
-            if len(results) == len(items):
-                return results
-            elif len(results) > 0:
-                result_map = {r.get("item", ""): r for r in results}
-                return [
-                    result_map.get(item, {"item": item, "is_bo": None, "confidence": "low", "reason": "未返回该项结果"})
-                    for item in items
-                ]
-        except json.JSONDecodeError:
-            pass
+    # 方案2：找到 "results" 关键字，向前找 { 向后用花括号计数提取完整JSON对象
+    for m in re.finditer(r'"results"', response):
+        # 向前找最近的 {
+        search_start = max(0, m.start() - 5000)
+        prefix = response[search_start:m.start()]
+        brace_pos = prefix.rfind('{')
+        if brace_pos >= 0:
+            json_str = _extract_json_object(response, search_start + brace_pos)
+            if json_str:
+                parsed = _try_parse(json_str)
+                if parsed is not None:
+                    return parsed
 
-    return [{"item": item, "is_bo": None, "confidence": "low", "reason": "无法自动解析，请人工判断"} for item in items]
+    # 方案3：找最后一个 { 并提取（可能是JSON开头）
+    last_brace = response.rfind('{')
+    if last_brace >= 0:
+        # 尝试从每个 { 位置提取，取第一个成功的
+        for m in re.finditer(r'\{', response):
+            json_str = _extract_json_object(response, m.start())
+            if json_str:
+                parsed = _try_parse(json_str)
+                if parsed is not None:
+                    return parsed
+
+    return default_results
 
 
 def check_single_item(item: str, element_type: str = "业务对象") -> list[dict]:
