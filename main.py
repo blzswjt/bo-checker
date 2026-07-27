@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 
-from llm import chat_stream, get_available_models, get_default_model_id
+from llm import chat_stream, get_available_models, get_default_model_id, analyze_image, get_vision_models, get_default_vision_model_id
 from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text, get_rule_detail
 from checker import parse_excel_file, extract_column_values, extract_item_context, check_items_stream, check_single_item
 import kb
@@ -96,6 +96,12 @@ async def get_models():
     return {"models": get_available_models(), "default": get_default_model_id()}
 
 
+@app.get("/api/vision-models")
+async def get_vision_models_api():
+    """返回可用的视觉模型列表"""
+    return {"models": get_vision_models(), "default": get_default_vision_model_id()}
+
+
 @app.get("/api/element-types")
 async def get_element_types():
     """返回元素类型列表及每种类型的识别规则名"""
@@ -116,6 +122,66 @@ async def get_element_types():
 async def get_rules():
     """返回所有元素类型的规则文本"""
     return {"rules": get_all_rules_text()}
+
+
+# ============================================================
+# API: 图片识别提取术语
+# ============================================================
+
+@app.post("/api/recognize-image")
+async def recognize_image(file: UploadFile = File(...), vision_model: str = None):
+    """
+    上传图片，调用视觉模型提取图片中的数据建模术语。
+    返回结构化列表：[{name, suggested_type}, ...]
+    """
+    if not file.content_type or not file.content_type.startswith("image/"):
+        return JSONResponse({"error": "请上传图片文件（jpg/png/webp）"}, status_code=400)
+
+    import base64
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:  # 20MB limit
+        return JSONResponse({"error": "图片大小不能超过 20MB"}, status_code=400)
+
+    image_b64 = base64.b64encode(content).decode("utf-8")
+
+    prompt = """请仔细分析这张图片，提取其中所有可能属于数据建模范畴的术语/名词。
+
+包括但不限于：
+- 业务对象（如：采购订单、客户、供应商、合同、产品等）
+- 逻辑实体（如：用户信息、地址信息、订单明细等）
+- 业务属性（如：姓名、编号、日期、金额、状态等）
+- 主题域/主题域分组（如：采购管理、财务管理、供应链等）
+
+请以严格的JSON数组格式返回，每个元素包含：
+- name: 术语名称（字符串）
+- suggested_type: 建议的元素类型（字符串，可选值：业务对象、逻辑实体、业务属性、主题域、主题域分组、主题域分类）
+- confidence: 你对该术语提取的信心程度（high/medium/low）
+
+只返回JSON数组，不要返回其他任何文字。示例：
+[{"name":"采购订单","suggested_type":"业务对象","confidence":"high"},{"name":"订单编号","suggested_type":"业务属性","confidence":"high"}]"""
+
+    try:
+        result_text = analyze_image(image_b64, prompt, model_id=vision_model)
+    except RuntimeError as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    # 解析 JSON 结果
+    import re
+    items = []
+    try:
+        # 尝试从结果中提取 JSON 数组
+        json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
+        if json_match:
+            items = json.loads(json_match.group())
+            # 校验格式
+            for item in items:
+                if "name" not in item:
+                    items = [i for i in items if "name" in i]
+    except (json.JSONDecodeError, ValueError):
+        # 如果解析失败，返回原始文本让用户手动提取
+        return {"items": [], "raw_text": result_text, "error": "AI返回格式异常，请查看原始文本"}
+
+    return {"items": items, "raw_text": result_text, "total": len(items)}
 
 
 # ============================================================

@@ -52,6 +52,27 @@ MODELS = [
     },
 ]
 
+# 视觉模型配置（用于图片识别提取术语）
+VISION_MODELS = [
+    {
+        "id": "doubao-vision",
+        "name": "豆包 Vision",
+        "provider": "ark",
+        "model": os.getenv("VISION_DOUBAO_MODEL", "doubao-1-5-vision-pro-32k-250115"),
+        "base_url": os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+        "api_key": os.getenv("DOUBAO_API_KEY", ""),
+    },
+    {
+        "id": "qwen-vl",
+        "name": "通义千问 VL",
+        "provider": "openai",
+        "model": os.getenv("VISION_QWEN_MODEL", "qwen-vl-max"),
+        "base_url": os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+        "api_key": os.getenv("QWEN_API_KEY", ""),
+    },
+]
+_default_vision_model_id = os.getenv("DEFAULT_VISION_MODEL", "doubao-vision")
+
 # 缓存客户端
 _clients = {}
 _default_model_id = os.getenv("DEFAULT_MODEL", "doubao-turbo")
@@ -75,6 +96,78 @@ def get_available_models() -> list[dict]:
 
 def get_default_model_id() -> str:
     return _default_model_id
+
+
+def get_vision_models() -> list[dict]:
+    """返回可用的视觉模型列表"""
+    available = []
+    for m in VISION_MODELS:
+        if m["api_key"]:
+            available.append({"id": m["id"], "name": m["name"]})
+    if not available:
+        available = [{"id": m["id"], "name": m["name"]} for m in VISION_MODELS]
+    return available
+
+
+def get_default_vision_model_id() -> str:
+    return _default_vision_model_id
+
+
+def _get_vision_config(model_id: str = None) -> dict:
+    """获取视觉模型配置"""
+    mid = model_id or _default_vision_model_id
+    for m in VISION_MODELS:
+        if m["id"] == mid:
+            return m
+    return VISION_MODELS[0]
+
+
+def _get_vision_client(model_id: str = None):
+    """获取视觉模型客户端"""
+    mid = model_id or _default_vision_model_id
+    cache_key = f"vision_{mid}"
+    if cache_key not in _clients:
+        cfg = _get_vision_config(mid)
+        if cfg["provider"] == "ark":
+            try:
+                from volcenginesdkarkruntime import Ark
+                _clients[cache_key] = Ark(api_key=cfg["api_key"], base_url=cfg["base_url"])
+            except (ImportError, AttributeError):
+                from openai import OpenAI
+                _clients[cache_key] = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
+        else:
+            from openai import OpenAI
+            _clients[cache_key] = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
+    return _clients[cache_key]
+
+
+def analyze_image(image_base64: str, prompt: str, model_id: str = None, temperature: float = 0.2) -> str:
+    """
+    调用视觉模型分析图片，返回文本结果。
+    image_base64: 图片的 base64 编码（不含 data:image 前缀）
+    """
+    cfg = _get_vision_config(model_id)
+    client = _get_vision_client(model_id)
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
+                {"type": "text", "text": prompt},
+            ],
+        }
+    ]
+    try:
+        response = client.chat.completions.create(
+            model=cfg["model"],
+            messages=messages,
+            temperature=temperature,
+            max_tokens=4096,
+        )
+        return response.choices[0].message.content or ""
+    except Exception as e:
+        _clients.pop(f"vision_{model_id or _default_vision_model_id}", None)
+        raise RuntimeError(f"视觉模型调用失败 ({cfg['name']}): {e}")
 
 
 def get_model_display_name(model_id: str = None) -> str:
