@@ -190,6 +190,28 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .low-conf{background:#fff8e1 !important}
 .low-conf:hover{background:#fff3cd !important}
 .eta-time{color:#1a73e8;font-weight:500}
+/* ========== Drag Upload ========== */
+.upload-z.drag-over{border-color:#1a73e8;background:#e8f0fe;transform:scale(1.02)}
+.upload-z.drag-over .ic{animation:pulse .8s infinite}
+/* ========== Pie Chart ========== */
+.pie-wrap{display:flex;align-items:center;gap:14px;margin:10px 0}
+.pie-chart{width:80px;height:80px;border-radius:50%;position:relative;flex-shrink:0}
+.pie-legend{font-size:11px;line-height:2}
+.pie-legend .dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+/* ========== Column Preview Modal ========== */
+.prev-modal-bg{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.3);z-index:999;display:flex;align-items:center;justify-content:center}
+.prev-modal{background:#fff;border-radius:12px;padding:18px 22px;max-width:520px;width:90%;max-height:70vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.15);font-size:12px}
+.prev-modal h4{font-size:14px;margin-bottom:10px;color:#1a73e8}
+.prev-modal table{width:100%;border-collapse:collapse;font-size:11px}
+.prev-modal th{background:#f8f8f8;padding:5px 8px;text-align:left;border-bottom:2px solid #e8e8e8}
+.prev-modal td{padding:4px 8px;border-bottom:1px solid #f3f3f3}
+.prev-modal .close-btn{margin-top:12px;display:block;width:100%;padding:7px;border:none;border-radius:6px;background:#f5f5f5;cursor:pointer;font-size:12px;color:#666}
+.prev-modal .close-btn:hover{background:#e8e8e8}
+/* ========== Single History ========== */
+.sh-item{padding:8px 10px;border-bottom:1px solid #f3f3f3;font-size:12px;cursor:pointer;transition:.15s}
+.sh-item:hover{background:#f8f8f8}
+.sh-item .sh-q{font-weight:500;color:#333}.sh-item .sh-t{font-size:10px;color:#999;margin-left:6px}
+.sh-item .sh-a{color:#555;margin-top:3px;white-space:pre-wrap;max-height:80px;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
 <body>
@@ -240,6 +262,10 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
         </div>
         <div class="single-res" id="sRes" style="display:none"></div>
       </div>
+      <div class="card" style="max-width:700px;margin-top:14px">
+        <h3 style="display:flex;justify-content:space-between;align-items:center">📝 分析历史 <span style="font-weight:400;font-size:10px;color:#999">最近 20 条，点击回看</span></h3>
+        <div id="sHistory" style="max-height:300px;overflow-y:auto"></div>
+      </div>
     </div>
     <div class="pg" id="pg-rules">
       <div class="card"><h3>📋 各元素类型识别规则</h3><div class="rules-tabs" id="rTabs"></div><div class="rules-ct" id="rCt">加载中...</div></div>
@@ -277,6 +303,44 @@ let _cellData={};     // 矩阵单元格详情数据
 function getModelId(){return document.getElementById('modelSel')?.value||null}
 
 // ============================================================
+// localStorage 持久化
+// ============================================================
+const LS_TASKS='bo_tasks',LS_TID='bo_tid',LS_HISTORY='bo_single_history';
+function saveTasks(){
+  try{
+    const data={};
+    for(const[id,t]of Object.entries(tasks)){
+      // 只保存可序列化的数据，跳过 DOM 引用和流式状态
+      const clean={id:t.id,st:t.st,et:t.et,file:t.file,fp:t.fp,sheets:t.sheets,selSheet:t.selSheet,
+        pairs:(t.pairs||[]).map(p=>({sheet:p.sheet,column:p.column,elementType:p.elementType,
+          items:p.items,results:p.results,summary:p.summary,status:p.status==='running'?'pending':p.status,
+          thinkingText:p.thinkingText,thinkingDone:p.thinkingDone,modelName:p.modelName,_contextMap:p._contextMap})),
+        _nextPid:t._nextPid,_batchSize:t._batchSize};
+      data[id]=clean;
+    }
+    localStorage.setItem(LS_TASKS,JSON.stringify(data));
+    localStorage.setItem(LS_TID,String(tid));
+    localStorage.setItem(LS_HISTORY,JSON.stringify(_singleHistory));
+  }catch(e){/* 空间不足时静默失败 */}
+}
+function loadTasks(){
+  try{
+    const raw=localStorage.getItem(LS_TASKS);
+    if(raw){
+      const data=JSON.parse(raw);
+      for(const[id,t]of Object.entries(data)){
+        t.pairs=(t.pairs||[]).map(p=>({...p,_filter:null,_thinkBatchSpan:null}));
+        tasks[id]=t;
+      }
+    }
+    const savedTid=localStorage.getItem(LS_TID);
+    if(savedTid)tid=parseInt(savedTid)||0;
+    const savedHist=localStorage.getItem(LS_HISTORY);
+    if(savedHist)_singleHistory=JSON.parse(savedHist);
+  }catch(e){/* 解析失败时使用空状态 */}
+}
+
+// ============================================================
 // Init: 加载元素类型、规则、模型列表
 // ============================================================
 async function init(){
@@ -290,7 +354,22 @@ async function init(){
   for(const[t,txt]of Object.entries(allRules)){const b=document.createElement('button');b.className='rules-tab'+(first?' on':'');b.textContent=t;b.onclick=()=>{rt.querySelectorAll('.rules-tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('rCt').textContent=txt};rt.appendChild(b);if(first){document.getElementById('rCt').textContent=txt;first=false}}
   const ks=document.getElementById('kbType');ET.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;ks.appendChild(o)});
   loadKB();
+  // 恢复持久化数据
+  loadTasks();
+  const ids=Object.keys(tasks);
+  if(ids.length){
+    activeTaskId=Math.max(...ids.map(Number));
+    document.getElementById('emptyHint')&&(document.getElementById('emptyHint').style.display='none');
+    renderSidebar();
+    render(tasks[activeTaskId]);
+  }
+  renderSingleHistory();
 }
+// 运行中离开提醒
+window.addEventListener('beforeunload',function(e){
+  const running=Object.values(tasks).some(t=>t.st==='running');
+  if(running){e.preventDefault();e.returnValue=''}
+});
 function showPg(n){document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('on'));document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));document.querySelector(`.nav button:nth-child(${n==='tasks'?1:n==='single'?2:n==='rules'?3:4})`).classList.add('on');document.getElementById('pg-'+n).classList.add('on');if(n==='kb')loadKB()}
 function toggleSidebar(){const sb=document.getElementById('sidebar');sb.classList.toggle('collapsed');const btn=sb.querySelector('.sb-toggle');btn.textContent=sb.classList.contains('collapsed')?'▶':'◀'}
 
@@ -331,6 +410,7 @@ function newTask(){
   renderSidebar();
   render(tasks[id]);
   showPg('tasks');
+  saveTasks();
 }
 function rmTask(id){
   delete tasks[id];
@@ -340,6 +420,7 @@ function rmTask(id){
   renderSidebar();
   if(activeTaskId&&tasks[activeTaskId])render(tasks[activeTaskId]);
   else{document.getElementById('taskArea').innerHTML='<div id="emptyHint" class="empty" style="padding:100px 0"><div style="font-size:48px;margin-bottom:16px">🔍</div><div style="font-size:15px;color:#888">点击左侧「+ 新建」创建识别任务</div></div>'}
+  saveTasks();
 }
 function render(t){
   let el=document.getElementById('task-'+t.id);
@@ -364,8 +445,16 @@ function render(t){
   }
 }
 function rConfig(t){
-  let h='<div class="upload-z" onclick="document.getElementById(\'f'+t.id+'\').click()"><div class="ic">📁</div><div>点击或拖拽上传 <b>.xlsx</b></div><p>上传后展示所有子表和列，支持多列同时识别</p></div><input type="file" id="f'+t.id+'" accept=".xlsx,.xls" style="display:none" onchange="doUpload('+t.id+',this)">';
+  let h=`<div class="upload-z" id="upload-z-${t.id}" onclick="document.getElementById('f${t.id}').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="event.preventDefault();this.classList.remove('drag-over');handleDrop(${t.id},event)"><div class="ic">📁</div><div>点击或拖拽上传 <b>.xlsx</b></div><p>上传后展示所有子表和列，支持多列同时识别</p></div><input type="file" id="f${t.id}" accept=".xlsx,.xls" style="display:none" onchange="doUpload(${t.id},this)">`;
   return h;
+}
+function handleDrop(id,ev){
+  const f=ev.dataTransfer.files[0];
+  if(!f)return;
+  if(!f.name.match(/\.xlsx?$/i)){alert('请上传 .xlsx 或 .xls 格式文件');return}
+  const inp=document.getElementById('f'+id);
+  const dt=new DataTransfer();dt.items.add(f);inp.files=dt.files;
+  doUpload(id,inp);
 }
 function rSelect(t){
   let h=`<div style="font-size:12px;margin-bottom:8px"><b>选择子表：</b></div><div class="sh-tabs">`;
@@ -378,7 +467,7 @@ function rSelect(t){
       const pair=t.pairs.find(p=>p.sheet===t.selSheet&&p.column===c.name);
       const checked=!!pair;
       const rtype=c.recommended_type;
-      h+=`<div class="col-r${checked?' sel':''}" style="flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;min-width:0"><input type="checkbox" ${checked?'checked':''} onchange="toggleCol(${t.id},'${esc(c.name)}',this.checked)" style="width:16px;height:16px;flex-shrink:0"><div class="cn" style="min-width:100px">${esc(c.name)}</div><div class="cm">${c.rows}行·${c.unique_count}项</div>${rtype?`<span class="ai-b">${rtype}</span>`:''}<div class="cs" title="${c.sample.slice(0,5).map(esc).join(', ')}">${c.sample.slice(0,3).map(esc).join(', ')}</div></label>`;
+      h+=`<div class="col-r${checked?' sel':''}" style="flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;min-width:0"><input type="checkbox" ${checked?'checked':''} onchange="toggleCol(${t.id},'${esc(c.name)}',this.checked)" style="width:16px;height:16px;flex-shrink:0"><div class="cn" style="min-width:100px">${esc(c.name)}</div><div class="cm">${c.rows}行·${c.unique_count}项</div>${rtype?`<span class="ai-b">${rtype}</span>`:''}<div class="cs" title="${c.sample.slice(0,5).map(esc).join(', ')}">${c.sample.slice(0,3).map(esc).join(', ')}</div></label><button class="btn btn-o btn-s" style="flex-shrink:0;font-size:10px" onclick="event.stopPropagation();previewCol(${t.id},'${esc(c.name)}')">👁 预览</button>`;
       if(checked){
         h+=`<select style="padding:3px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px;flex-shrink:0" onchange="pairType(${t.id},${t.pairs.indexOf(pair)},this.value)">`;
         ET.forEach(e=>{h+=`<option${e===pair.elementType?' selected':''}>${e}</option>`});
@@ -411,14 +500,20 @@ function rRunning(t){
     const pct=total>0?Math.round(done/total*100):0;
     h+=`<div class="pair" id="pair-${t.id}-${pi}"><div class="pair-hd"><span class="pair-title">📋 ${esc(p.column)} → ${esc(p.elementType)}</span><div style="display:flex;align-items:center;gap:6px">${p.modelName?`<span style="font-size:10px;padding:2px 8px;background:#e3f2fd;color:#1565c0;border-radius:4px">🧠 ${esc(p.modelName)}</span>`:''}<span class="bdg ${p.status==='done'?'bdg-y':'bdg-u'}" style="font-size:10px">${p.status==='done'?'完成':p.status==='running'?`${done}/${total}`:'等待'}</span></div></div>`;
     h+=`<div class="prog-t"><div class="prog-f" id="pf-${t.id}-${pi}" style="width:${pct}%"></div></div><div class="prog-txt"><span>${done<total?'⏳ 分析中...':'✅ 完成'}</span><span>${pct}% <span class="eta-time" id="eta-${t.id}-${pi}"></span></span></div>`;
-    if(p.summary){const s=p.summary;h+=`<div class="stats"><div class="st st-t"><div class="n">${s.total}</div><div class="l">总计</div></div><div class="st st-y"><div class="n">${s.is_bo}</div><div class="l">✅ 是</div></div><div class="st st-n"><div class="n">${s.not_bo}</div><div class="l">❌ 不是</div></div><div class="st st-u"><div class="n">${s.unknown}</div><div class="l">⚠️ 待人工</div></div></div>`}
+    if(p.summary){const s=p.summary;
+      // 饼图
+      const total=s.total||1;
+      const py=(s.is_bo/total*100).toFixed(1),pn=(s.not_bo/total*100).toFixed(1),pu=(s.unknown/total*100).toFixed(1);
+      const pEnd1=s.is_bo/total*360,pEnd2=(s.is_bo+s.not_bo)/total*360;
+      h+=`<div class="pie-wrap"><div class="pie-chart" style="background:conic-gradient(#2e7d32 0deg ${pEnd1}deg,#c62828 ${pEnd1}deg ${pEnd2}deg,#e65100 ${pEnd2}deg 360deg)"></div><div class="pie-legend"><div><span class="dot" style="background:#2e7d32"></span>✅ 是 ${s.is_bo} (${py}%)</div><div><span class="dot" style="background:#c62828"></span>❌ 不是 ${s.not_bo} (${pn}%)</div><div><span class="dot" style="background:#e65100"></span>⚠️ 待人工 ${s.unknown} (${pu}%)</div></div></div>`;
+      h+=`<div class="stats"><div class="st st-t"><div class="n">${s.total}</div><div class="l">总计</div></div><div class="st st-y"><div class="n">${s.is_bo}</div><div class="l">✅ 是</div></div><div class="st st-n"><div class="n">${s.not_bo}</div><div class="l">❌ 不是</div></div><div class="st st-u"><div class="n">${s.unknown}</div><div class="l">⚠️ 待人工</div></div></div>`}
     // View toggle buttons
     h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0"><div class="view-toggle"><button class="${viewMode==='list'?'on':''}" onclick="switchView('list')">☰ 列表视图</button><button class="${viewMode==='matrix'?'on':''}" onclick="switchView('matrix')">▦ 规则矩阵</button></div></div>`;
     if(viewMode==='matrix'){
       h+=renderMatrixView(t,pi);
     } else {
     if(p.results&&p.results.length){
-      h+=`<div style="margin-top:6px;display:flex;gap:4px"><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'all')">全部</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},true)">✅</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},false)">❌</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'unk')">⚠️</button><button class="btn btn-o btn-s" onclick="pExport(${t.id},${pi})">📥</button></div>`;
+      h+=`<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'all')">全部</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},true)">✅</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},false)">❌</button><button class="btn btn-o btn-s" onclick="pFilter(${t.id},${pi},'unk')">⚠️</button><button class="btn btn-o btn-s" onclick="pExport(${t.id},${pi})">📥 CSV</button><button class="btn btn-o btn-s" onclick="copyResults(${t.id},${pi})">📋 复制</button></div>`;
     }
     h+=`<div class="tb-w" style="margin-top:6px"><table class="rt"><thead><tr><th style="width:28px"></th><th style="width:30px">#</th><th>名称</th><th style="width:60px">结论</th><th style="width:46px">置信</th><th>理由</th><th style="width:70px">操作</th></tr></thead><tbody id="tb-${t.id}-${pi}">`;
     if(p.results&&p.results.length){
@@ -440,7 +535,10 @@ function rRunning(t){
     h+=`<div class="think-box"><div class="think-hd" onclick="toggleThink(this)"><span>🧠 思考过程 <span style="color:#1a73e8;font-weight:600">${thinkStatus}</span></span><span class="raw-arrow">${thinkText?'▼':'▶'}</span></div><div class="think-ct${thinkText?'':' hidden'}" id="thinkct-${t.id}-${pi}">${thinkText?formatThinking(thinkText):'<span style="color:#bbb">等待AI思考...</span>'}</div></div>`;
     h+=`</div>`;
   });
-  if(t.st==='done')h+=`<div style="margin-top:12px;display:flex;gap:8px"><button class="btn btn-p" onclick="newTask()">➕ 新建任务</button><button class="btn btn-o" onclick="tReset(${t.id})">🔄 重新配置</button></div>`;
+  if(t.st==='done'){
+    const hasFailed=t.pairs.some(p=>p.results?.some(r=>r.is_bo===null));
+    h+=`<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p" onclick="newTask()">➕ 新建任务</button><button class="btn btn-o" onclick="tReset(${t.id})">🔄 重新配置</button>${hasFailed?`<button class="btn btn-o" style="border-color:#e65100;color:#e65100" onclick="rerunFailed(${t.id})">🔁 重跑失败/待定项</button>`:''}</div>`;
+  }
   return h;
 }
 
@@ -474,6 +572,7 @@ async function doUpload(id,inp){
     t.st='select';
   }catch(e){t.st='error';t.error='解析失败: '+e.message}
   render(t);renderSidebar();
+  saveTasks();
 }
 
 function addPairSilent(t,col,type){
@@ -640,6 +739,7 @@ async function startAll(id){
   // 只在当前查看的仍是该任务时才渲染，避免覆盖正在查看的其他任务
   if(activeTaskId==t.id){render(t)}
   renderSidebar();
+  saveTasks();
 }
 
 // ============================================================
@@ -812,6 +912,80 @@ function pExport(id,pi){
 }
 
 // ============================================================
+// Copy Results: 复制到剪贴板
+// ============================================================
+function copyResults(id,pi){
+  const t=tasks[id];const p=t.pairs[pi];if(!p.results.length)return;
+  let txt=`${p.elementType} - ${p.column} 识别结果\n`;txt+='-'.repeat(40)+'\n';
+  p.results.forEach((r,i)=>{const v=r.is_bo===true?'✅是':r.is_bo===false?'❌不是':'⚠️待人工';txt+=`${i+1}. ${r.item} | ${v} | ${r.confidence} | ${r.reason||''}\n`});
+  navigator.clipboard.writeText(txt).then(()=>{const btn=event.target;const orig=btn.textContent;btn.textContent='✅ 已复制';setTimeout(()=>{btn.textContent=orig},1500)}).catch(()=>{alert('复制失败，请手动复制')});
+}
+
+// ============================================================
+// Column Preview: 列数据预览
+// ============================================================
+async function previewCol(id,col){
+  const t=tasks[id];
+  try{
+    const r=await fetch(`/api/column-values?file_path=${encodeURIComponent(t.fp)}&sheet=${encodeURIComponent(t.selSheet)}&column=${encodeURIComponent(col)}`);
+    const d=await r.json();
+    const vals=d.values||[];
+    const bg=document.createElement('div');bg.className='prev-modal-bg';bg.onclick=function(e){if(e.target===bg)bg.remove()};
+    let h=`<div class="prev-modal"><h4>👁 ${esc(col)} - 数据预览</h4><div style="font-size:11px;color:#999;margin-bottom:8px">共 ${vals.length} 个非空唯一值</div><table><thead><tr><th style="width:36px">#</th><th>值</th></tr></thead><tbody>`;
+    vals.slice(0,50).forEach((v,i)=>{h+=`<tr><td>${i+1}</td><td>${esc(v)}</td></tr>`});
+    if(vals.length>50)h+=`<tr><td colspan="2" style="color:#999;text-align:center">... 还有 ${vals.length-50} 条</td></tr>`;
+    h+=`</tbody></table><button class="close-btn" onclick="this.closest('.prev-modal-bg').remove()">关闭</button></div>`;
+    bg.innerHTML=h;document.body.appendChild(bg);
+  }catch(e){alert('预览失败: '+e.message)}
+}
+
+// ============================================================
+// Rerun Failed: 重跑失败/待定项
+// ============================================================
+async function rerunFailed(id){
+  const t=tasks[id];
+  const failedPairs=[];
+  t.pairs.forEach((p,pi)=>{
+    const failedItems=p.results.filter(r=>r.is_bo===null).map(r=>r.item);
+    if(failedItems.length)failedPairs.push({pi,p,items:failedItems});
+  });
+  if(!failedPairs.length){alert('没有失败/待定项');return}
+  const totalFailed=failedPairs.reduce((s,x)=>s+x.items.length,0);
+  if(!confirm(`确认重跑 ${totalFailed} 个失败/待定项？`))return;
+  t.st='running';render(t);renderSidebar();
+  const bs=t._batchSize||5;
+  for(const fp of failedPairs){
+    const p=fp.p;const pi=fp.pi;
+    // 移除失败项的结果
+    p.results=p.results.filter(r=>r.is_bo!==null);
+    p.status='running';p.summary=null;p.thinkingText='';p.thinkingDone=false;
+    render(t);
+    try{
+      const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:fp.items,element_type:p.elementType,batch_size:bs,model_id:getModelId(),context_map:p._contextMap})});
+      const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
+      while(true){
+        const{done,value}=await reader.read();if(done)break;
+        buf+=dec.decode(value,{stream:true});
+        const lines=buf.split('\n');buf=lines.pop();
+        for(const line of lines){
+          if(!line.startsWith('data: '))continue;
+          try{
+            const ev=JSON.parse(line.slice(6));
+            if(ev.type==='result'){p.results.push(ev)}
+            else if(ev.type==='result_update'){
+              const ri=p.results.findIndex(r=>r.item===ev.item);
+              if(ri>=0){p.results[ri].is_bo=ev.is_bo;p.results[ri].confidence=ev.confidence;p.results[ri].reason=ev.reason;p.results[ri].rules_check=ev.rules_check||[]}
+            }
+            else if(ev.type==='done'){p.summary=ev.summary;p.status='done';p.thinkingDone=true}
+          }catch(e){}
+        }
+      }
+    }catch(e){p.status='done'}
+  }
+  t.st='done';if(activeTaskId==t.id)render(t);renderSidebar();
+}
+
+// ============================================================
 // Corrections: 手动纠正识别结果
 // ============================================================
 async function markCorrect(tid,pi,ri,isMatch){
@@ -829,16 +1003,39 @@ async function markCorrect(tid,pi,ri,isMatch){
 // ============================================================
 // Single Analysis: 单个事物分析
 // ============================================================
+let _singleHistory=[];
 async function doSingle(){
   const item=document.getElementById('sItem').value.trim();if(!item)return;
   const btn=document.getElementById('sBtn');btn.disabled=true;btn.textContent='分析中...';
   const div=document.getElementById('sRes');div.style.display='block';div.innerHTML='<span style="color:#999">分析中...</span>';
+  let full='';
   try{
     const res=await fetch('/api/check-single',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item,element_type:sType,model_id:getModelId()})});
-    const reader=res.body.getReader();const dec=new TextDecoder();let full='';div.innerHTML='';
+    const reader=res.body.getReader();const dec=new TextDecoder();div.innerHTML='';
     while(true){const{done,value}=await reader.read();if(done)break;const txt=dec.decode(value,{stream:true});for(const l of txt.split('\n')){if(!l.startsWith('data: '))continue;try{const d=JSON.parse(l.slice(6));if(d.content){full+=d.content;div.innerHTML=formatThinking(full)}}catch(e){}}}
   }catch(e){div.innerHTML=`<span style="color:red">失败: ${e.message}</span>`}
   btn.disabled=false;btn.textContent='分析';
+  // 存入历史
+  if(full){
+    _singleHistory.unshift({item,type:sType,answer:full,time:new Date().toLocaleTimeString()});
+    if(_singleHistory.length>20)_singleHistory.length=20;
+    renderSingleHistory();
+    saveTasks();
+  }
+}
+function renderSingleHistory(){
+  const el=document.getElementById('sHistory');if(!el)return;
+  if(!_singleHistory.length){el.innerHTML='<div style="color:#bbb;text-align:center;padding:20px;font-size:12px">暂无分析记录</div>';return}
+  let h='';
+  _singleHistory.forEach((sh,i)=>{
+    h+=`<div class="sh-item" onclick="showSingleHistory(${i})"><span class="sh-q">${esc(sh.item)}</span><span style="font-size:10px;padding:1px 6px;background:#e3f2fd;color:#1565c0;border-radius:3px;margin-left:6px">${esc(sh.type)}</span><span class="sh-t">${sh.time}</span><div class="sh-a">${esc(sh.answer.slice(0,120))}${sh.answer.length>120?'...':''}</div></div>`;
+  });
+  el.innerHTML=h;
+}
+function showSingleHistory(idx){
+  const sh=_singleHistory[idx];if(!sh)return;
+  document.getElementById('sItem').value=sh.item;
+  const div=document.getElementById('sRes');div.style.display='block';div.innerHTML=formatThinking(sh.answer);
 }
 
 // ============================================================
