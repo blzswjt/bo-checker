@@ -781,7 +781,7 @@ function confirmImgItems(id){
     typeGroups[type].push(it.name);
   });
   for(const[type,items]of Object.entries(typeGroups)){
-    t.pairs.push({sheet:'[图片提取]',column:type+'-提取项',elementType:type,items:items,results:[],summary:null,status:'pending',_filter:null,thinkingText:'',thinkingDone:false,modelName:null,_contextMap:{}});
+    t.pairs.push({sheet:'[图片提取]',column:type+'-提取项',elementType:type,items:items,results:[],summary:null,status:'pending',_filter:null,thinkingText:'',thinkingDone:false,modelName:null,_contextMap:{},_fromImage:true});
   }
   t.st='select';t.file=t.file||'图片识别';
   render(t);renderSidebar();saveTasks();
@@ -828,6 +828,8 @@ async function startAll(id){
     const ct=getThinkCt(t,pi);
     if(ct){ct.classList.remove('hidden');ct.innerHTML='<div style="color:#1a73e8;font-size:12px">⏳ 正在连接AI模型，请稍候...</div>';const box=ct.closest('.think-box');if(box){const ar=box.querySelector('.raw-arrow');if(ar)ar.textContent='▼'}}
     updateThinkStatus(t,pi,'连接中...');
+    // 图片提取的 pair 已有 items，跳过 Excel 列值获取
+    if(!p._fromImage){
     try{
       const vr=await fetch(`/api/column-values?file_path=${encodeURIComponent(t.fp)}&sheet=${encodeURIComponent(p.sheet)}&column=${encodeURIComponent(p.column)}`);
       const vd=await vr.json();p.items=vd.values||[];
@@ -839,6 +841,7 @@ async function startAll(id){
         if(cd.context&&Object.keys(cd.context).length>0)p._contextMap=cd.context;
       }catch(e){/* 上下文获取失败不影响主流程 */}
     }catch(e){p.items=[];p.status='error';return}
+    } // end if !p._fromImage
     if(!p.items.length){p.status='done';p.summary={total:0,is_bo:0,not_bo:0,unknown:0};p.thinkingDone=true;return}
     try{
       const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:bs,model_id:getModelId(),context_map:p._contextMap})});
