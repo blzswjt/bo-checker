@@ -783,9 +783,9 @@ function confirmImgItems(id){
   for(const[type,items]of Object.entries(typeGroups)){
     t.pairs.push({sheet:'[图片提取]',column:type+'-提取项',elementType:type,items:items,results:[],summary:null,status:'pending',_filter:null,thinkingText:'',thinkingDone:false,modelName:null,_contextMap:{},_fromImage:true});
   }
-  t.st='select';t.file=t.file||'图片识别';
-  render(t);renderSidebar();saveTasks();
-  // Auto start
+  t.st='running';t.file=t.file||'图片识别';
+  renderSidebar();saveTasks();
+  // Auto start (跳过 select 渲染，直接进 running)
   startAll(id);
 }
 
@@ -890,6 +890,9 @@ async function startAll(id){
             }
             else if(ev.type==='thinking'){
               p.thinkingText+=ev.token;
+              // 确保思考区域可见
+              const ctCheck=getThinkCt(t,pi);
+              if(ctCheck&&ctCheck.classList.contains('hidden')){ctCheck.classList.remove('hidden');const tb=ctCheck.closest('.think-box');if(tb){const ar=tb.querySelector('.raw-arrow');if(ar)ar.textContent='▼'}}
               // 检查span是否仍在DOM中（render/视图切换重建后会失效）
               const spanValid=p._thinkBatchSpan&&p._thinkBatchSpan.parentElement;
               if(spanValid){
