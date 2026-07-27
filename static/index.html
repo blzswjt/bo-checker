@@ -530,15 +530,15 @@ async function startAll(id){
             }
             else if(ev.type==='thinking'){
               p.thinkingText+=ev.token;
-              // 检查span是否仍在DOM中（render重建后会失效）
+              // 检查span是否仍在DOM中（render/视图切换重建后会失效）
               const spanValid=p._thinkBatchSpan&&p._thinkBatchSpan.parentElement;
               if(spanValid){
                 p._thinkBatchSpan.appendChild(document.createTextNode(ev.token));
                 const ct=getThinkCt(t,pi);
                 if(ct)ct.scrollTop=ct.scrollHeight;
               } else {
-                // span不存在或已脱离DOM，使用节流方式更新innerHTML（避免每个token都全量重渲染）
-                p._thinkBatchSpan=null;
+                // span失效（视图切换后DOM重建），用节流方式更新整个容器的innerHTML
+                // 不创建新span（避免与render已生成的格式化内容重复导致空白/乱序）
                 const ct=getThinkCt(t,pi);
                 if(ct){
                   if(!p._thinkThrottle){
@@ -547,7 +547,6 @@ async function startAll(id){
                       p._thinkThrottle=false;
                       const ct2=getThinkCt(t,pi);
                       if(ct2){
-                        if(ct2.innerHTML.includes('等待AI思考')||!ct2.innerHTML.trim())ct2.innerHTML='';
                         ct2.innerHTML=formatThinking(p.thinkingText);
                         ct2.classList.remove('hidden');
                         ct2.scrollTop=ct2.scrollHeight;
