@@ -487,10 +487,17 @@ async function startAll(id){
     try{
       const vr=await fetch(`/api/column-values?file_path=${encodeURIComponent(t.fp)}&sheet=${encodeURIComponent(p.sheet)}&column=${encodeURIComponent(p.column)}`);
       const vd=await vr.json();p.items=vd.values||[];
+      // 获取业务上下文（L1/L2/L3/定义），用于增强AI识别准确率
+      p._contextMap=null;
+      try{
+        const cr=await fetch(`/api/excel-context?file_path=${encodeURIComponent(t.fp)}&sheet=${encodeURIComponent(p.sheet)}&column=${encodeURIComponent(p.column)}`);
+        const cd=await cr.json();
+        if(cd.context&&Object.keys(cd.context).length>0)p._contextMap=cd.context;
+      }catch(e){/* 上下文获取失败不影响主流程 */}
     }catch(e){p.items=[];p.status='error';return}
     if(!p.items.length){p.status='done';p.summary={total:0,is_bo:0,not_bo:0,unknown:0};p.thinkingDone=true;return}
     try{
-      const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:5,model_id:getModelId()})});
+      const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:5,model_id:getModelId(),context_map:p._contextMap})});
       const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
       while(true){
         const{done,value}=await reader.read();if(done)break;

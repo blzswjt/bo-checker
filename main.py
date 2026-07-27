@@ -16,7 +16,7 @@ from typing import Optional
 
 from llm import chat_stream, get_available_models, get_default_model_id
 from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text, get_rule_detail
-from checker import parse_excel_file, extract_column_values, check_items_stream, check_single_item
+from checker import parse_excel_file, extract_column_values, extract_item_context, check_items_stream, check_single_item
 import kb
 
 app = FastAPI(title="数据建模识别智能体", version="1.0.0", description="多元素并发识别 · 流式思考 · 手动纠正 · 知识库学习")
@@ -129,6 +129,7 @@ class CheckRequest(BaseModel):
     element_type: str = "业务对象"
     batch_size: int = 5
     model_id: Optional[str] = None
+    context_map: Optional[dict] = None  # {item_name: {l1, l2, l3, definition}} 业务上下文
 
 
 @app.post("/api/check-items")
@@ -138,7 +139,7 @@ async def check_items(req: CheckRequest):
         return JSONResponse({"error": f"不支持的元素类型: {req.element_type}"}, status_code=400)
 
     def event_stream():
-        for event in check_items_stream(req.items, req.element_type, req.batch_size, model_id=req.model_id):
+        for event in check_items_stream(req.items, req.element_type, req.batch_size, model_id=req.model_id, context_map=req.context_map):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -174,6 +175,16 @@ async def get_column_values(file_path: str, sheet: str, column: str):
         return JSONResponse({"error": "文件不存在"}, status_code=404)
     values = extract_column_values(str(full_path), sheet, column)
     return {"values": values, "count": len(values)}
+
+
+@app.get("/api/excel-context")
+async def get_excel_context(file_path: str, sheet: str, column: str):
+    """获取指定列中每个条目的业务上下文（L1/L2/L3/定义），用于增强AI识别"""
+    full_path = UPLOAD_DIR / file_path
+    if not full_path.exists():
+        return JSONResponse({"error": "文件不存在"}, status_code=404)
+    context = extract_item_context(str(full_path), sheet, column)
+    return {"context": context, "count": len(context)}
 
 
 # ============================================================

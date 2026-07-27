@@ -173,6 +173,70 @@ def extract_column_values(file_path: str, sheet_name: str, column_name: str) -> 
     values = [v for v in values if v and v != "nan" and len(v) > 1]
     return list(dict.fromkeys(values))  # 去重保序
 
+
+def extract_item_context(file_path: str, sheet_name: str, column_name: str) -> dict[str, dict]:
+    """
+    从Excel中提取每个条目的业务上下文（L1/L2/L3/定义）。
+    返回 {item_name: {l1, l2, l3, definition}} 映射，用于增强AI识别准确率。
+    """
+    all_sheets = pd.read_excel(file_path, sheet_name=None)
+    df = all_sheets.get(sheet_name)
+    if df is None or df.empty:
+        return {}
+
+    # 检测上下文列
+    l1_col = l2_col = l3_col = def_col = None
+    for col in df.columns:
+        col_s = str(col).strip()
+        if not l1_col and any(kw in col_s for kw in ['L1', '主题域分类']):
+            l1_col = col
+        elif not l2_col and any(kw in col_s for kw in ['L2', '主题域分组']):
+            l2_col = col
+        elif not l3_col and any(kw in col_s for kw in ['L3', '主题域']) and col != l1_col and col != l2_col:
+            l3_col = col
+        elif not def_col and any(kw in col_s for kw in ['定义', '说明', '描述']):
+            def_col = col
+
+    if not any([l1_col, l2_col, l3_col, def_col]):
+        return {}
+
+    # 找到目标列（模糊匹配）
+    target_col = None
+    for col in df.columns:
+        if str(col).strip() == column_name:
+            target_col = col
+            break
+    if target_col is None:
+        return {}
+
+    context_map = {}
+    for _, row in df.iterrows():
+        item_val = str(row.get(target_col, '')).strip()
+        if not item_val or item_val == 'nan' or len(item_val) <= 1:
+            continue
+        if item_val not in context_map:
+            ctx = {}
+            if l1_col:
+                v = str(row.get(l1_col, '')).strip()
+                if v and v != 'nan':
+                    ctx['l1'] = v
+            if l2_col:
+                v = str(row.get(l2_col, '')).strip()
+                if v and v != 'nan':
+                    ctx['l2'] = v
+            if l3_col:
+                v = str(row.get(l3_col, '')).strip()
+                if v and v != 'nan':
+                    ctx['l3'] = v
+            if def_col:
+                v = str(row.get(def_col, '')).strip()
+                if v and v != 'nan' and v != '同上':
+                    ctx['definition'] = v
+            if ctx:
+                context_map[item_val] = ctx
+
+    return context_map
+
 # ============================================================
 # 2. 流式结论/规则实时检测
 # ============================================================
@@ -283,7 +347,7 @@ def _detect_streaming_rule_checks(text: str, batch: list[str], last_pos: int, em
 # 3. 流式识别主生成器
 # ============================================================
 
-def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5, model_id: str = None):
+def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5, model_id: str = None, context_map: dict = None):
     """
     生成器：逐批调用LLM判断，yield SSE事件。
     集成知识库示例，结果包含逐条规则分析(rules_check)。
@@ -302,7 +366,7 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
         batch = items[i:i + batch_size]
         numbered = "\n".join(f"{j+1}. {item}" for j, item in enumerate(batch))
 
-        prompt = build_batch_prompt(element_type, numbered, kb_examples=kb_examples)
+        prompt = build_batch_prompt(element_type, numbered, kb_examples=kb_examples, context_map=context_map)
         if not prompt:
             for j, item in enumerate(batch):
                 result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"未知元素类型: {element_type}", "rules_check": []}

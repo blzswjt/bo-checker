@@ -25,6 +25,8 @@ knowledge.json
 
 # 测试数据
 test_data.xlsx
+*.xlsx
+*.xls
 
 # IDE
 .vscode/

@@ -196,8 +196,8 @@ def build_check_prompt(element_type: str) -> str:
     return "\n".join(parts)
 
 
-def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = None) -> str:
-    """构建批量识别 Prompt，集成知识库示例和逐条规则分析"""
+def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = None, context_map: dict = None) -> str:
+    """构建批量识别 Prompt，集成知识库示例、业务上下文和逐条规则分析"""
     rules = ELEMENT_RULES.get(element_type)
     if not rules:
         return ""
@@ -253,6 +253,28 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
     all_rule_names = [r["rule"] for r in id_rules] + [r["rule"] for r in nm_rules] + [r["rule"] for r in df_rules]
     rule_names_json = json.dumps(all_rule_names, ensure_ascii=False)
 
+    # 业务上下文信息
+    context_section = ""
+    if context_map:
+        context_lines = []
+        for item_name, ctx in context_map.items():
+            parts = []
+            if ctx.get('l1'):
+                parts.append(ctx['l1'])
+            if ctx.get('l2'):
+                parts.append(ctx['l2'])
+            if ctx.get('l3'):
+                parts.append(ctx['l3'])
+            path = ' → '.join(parts) if parts else ''
+            line = f"- {item_name}"
+            if path:
+                line += f"（所属流程：{path}）"
+            if ctx.get('definition'):
+                line += f"\n  定义：{ctx['definition'][:100]}"
+            context_lines.append(line)
+        if context_lines:
+            context_section = "\n\n## 业务上下文（来自Excel文件，请参考）\n" + "\n".join(context_lines)
+
     return f"""你是一个数据治理专家。请判断以下事物是否是「{element_type}」。
 
 ## {element_type}定义
@@ -262,7 +284,7 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
 
 ## 命名规则{nm_detail}
 
-## 定义规则{df_detail}{not_summary}{kb_section}
+## 定义规则{df_detail}{not_summary}{kb_section}{context_section}
 
 ## 输出要求
 
