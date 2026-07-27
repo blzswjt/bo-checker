@@ -376,13 +376,13 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
     model_name = get_model_display_name(model_id)
     yield {"type": "start", "total": total, "element_type": element_type, "model_id": model_id, "model_name": model_name}
 
-    # 获取知识库示例
-    kb_examples = kb.get_examples(element_type)
-
     all_results: dict[str, dict] = {}  # {item_name: result_dict} O(1) 查找
 
     for i in range(0, total, batch_size):
         batch = items[i:i + batch_size]
+
+        # 智能示例选取：每批根据当前 batch 内容获取最相关的 KB 示例
+        kb_examples = kb.get_examples(element_type, items=batch)
         numbered = "\n".join(f"{j+1}. {item}" for j, item in enumerate(batch))
 
         prompt = build_batch_prompt(element_type, numbered, kb_examples=kb_examples, context_map=context_map)
