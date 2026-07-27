@@ -373,7 +373,7 @@ function rSelect(t){
   h+=`</div>`;
   const sh=t.sheets.find(s=>s.name===t.selSheet);
   if(sh){
-    h+=`<div style="font-size:12px;margin-bottom:6px"><b>勾选要识别的列，并选择元素类型：</b></div><div class="col-list" style="max-height:340px">`;
+    h+=`<div style="font-size:12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><b>勾选要识别的列，并选择元素类型：</b><span style="display:flex;gap:4px"><button class="btn btn-o btn-s" onclick="toggleAllCols(${t.id},true)">✅ 全选</button><button class="btn btn-o btn-s" onclick="toggleAllCols(${t.id},false)">☐ 取消全选</button></span></div><div class="col-list" style="max-height:340px">`;
     sh.columns.forEach(c=>{
       const pair=t.pairs.find(p=>p.sheet===t.selSheet&&p.column===c.name);
       const checked=!!pair;
@@ -482,6 +482,17 @@ function toggleCol(id,col,checked){
   const t=tasks[id];
   if(checked){const sh=t.sheets.find(s=>s.name===t.selSheet);const c=sh?.columns.find(x=>x.name===col);addPairSilent(t,col,c?.recommended_type||t.et)}
   else{t.pairs=t.pairs.filter(p=>!(p.sheet===t.selSheet&&p.column===col))}
+  render(t);
+}
+function toggleAllCols(id,checked){
+  const t=tasks[id];
+  const sh=t.sheets.find(s=>s.name===t.selSheet);
+  if(!sh)return;
+  if(checked){
+    sh.columns.forEach(c=>{addPairSilent(t,c.name,c.recommended_type||t.et)});
+  }else{
+    t.pairs=t.pairs.filter(p=>p.sheet!==t.selSheet);
+  }
   render(t);
 }
 function pairType(id,i,t){tasks[id].pairs[i].elementType=t;render(tasks[id])}
