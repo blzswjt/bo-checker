@@ -266,7 +266,8 @@ def _parse_streaming_conclusions(text: str, batch: list[str]):
             continue
         # 检测结论行: 支持多种格式
         # - 结论：是 / - **结论：** 是 / 结论：是 / **结论：** 是
-        m = re.match(r'[-\-\*]*\s*\**\s*结论\**\s*[：:]\s*(.*)', line_s)
+        # - **判定：** 是 / 判断：是 / 是否为业务对象：是
+        m = re.match(r'[-\-\*>\s]*\**\s*(?:结论|判定|判断|是否业务对象|识别结果)\**\s*[：:]\s*(.*)', line_s)
         if m and results and results[-1]['conclusion'] is None:
             conclusion_text = m.group(1).strip().lstrip('*').strip()
             if '不是' in conclusion_text or '否' in conclusion_text:
@@ -387,7 +388,9 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
             full_response = ""
             json_started = False
             emitted_indices = set()  # 已经通过思考解析发射的结果索引
+            _pending_items = set()   # 已发射 item_pending 的条目索引
             _last_parse_len = 0  # 上次解析到的位置，避免重复解析
+            _item_scan_pos = 0   # item_header 扫描位置（避免重复扫描）
             _rule_check_emitted = {}  # {item_idx: set(rule_names)} 已发射的规则检查
             _rule_check_last_pos = 0  # 规则检查解析位置
 
@@ -418,6 +421,25 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                                 "reason": ck['reason'],
                             }
 
+                    # 实时检测新条目开始分析（检测到标题行立即通知前端显示占位行）
+                    if '\n' in full_response[_item_scan_pos:]:
+                        _new_end = len(full_response)
+                        _new_text = full_response[_item_scan_pos:_new_end]
+                        for _scan_line in _new_text.split('\n'):
+                            _scan_ls = _scan_line.strip()
+                            _hm = _ITEM_HEADER_RE.match(_scan_ls)
+                            if _hm:
+                                _num = int(_hm.group(1))
+                                _name = _hm.group(2).strip().rstrip('*').strip()
+                                if _name not in _SECTION_WORDS and len(_name) > 1 and 1 <= _num <= len(batch):
+                                    _item_idx = _num - 1
+                                    if _item_idx not in _pending_items and _item_idx not in emitted_indices:
+                                        _pending_items.add(_item_idx)
+                                        emitted_indices.add(_item_idx)
+                                        all_results.append({"item": batch[_item_idx], "is_bo": None, "confidence": "pending", "reason": "", "rules_check": []})
+                                        yield {"type": "item_pending", "index": i + _item_idx, "item": batch[_item_idx], "batch_index": batch_idx}
+                        _item_scan_pos = _new_end
+
                     # 实时检测已完成的结论，立即发射结果
                     # 优化：只在有新完整行时才重新解析，避免O(n²)重解析
                     last_nl = full_response.rfind('\n')
@@ -425,19 +447,20 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                         _last_parse_len = last_nl
                         conclusions = _parse_streaming_conclusions(full_response, batch)
                         for c in conclusions:
-                            if c['conclusion'] and c['idx'] not in emitted_indices:
-                                emitted_indices.add(c['idx'])
+                            if c['conclusion'] and c['idx'] in emitted_indices:
                                 con = c['conclusion']
                                 item_name = batch[c['idx']]
-                                result = {
-                                    "item": item_name,
-                                    "is_bo": con['is_bo'],
-                                    "confidence": con['confidence'],
-                                    "reason": con['reason'],
-                                    "rules_check": [],
-                                }
-                                all_results.append(result)
-                                yield {"type": "result", "index": i + c['idx'], **result}
+                                # 更新 all_results 中已有的 pending 记录
+                                for ar in all_results:
+                                    if ar.get('item') == item_name and ar.get('confidence') == 'pending':
+                                        ar['is_bo'] = con['is_bo']
+                                        ar['confidence'] = con['confidence']
+                                        ar['reason'] = con['reason']
+                                        break
+                                yield {"type": "result_update", "index": i + c['idx'],
+                                       "item": item_name, "is_bo": con['is_bo'],
+                                       "confidence": con['confidence'], "reason": con['reason'],
+                                       "rules_check": []}
 
             yield {"type": "thinking_end", "batch_index": batch_idx}
 

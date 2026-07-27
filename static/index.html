@@ -186,6 +186,7 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .qa-saved{font-size:10px;color:#2e7d32;margin-right:4px}
 /* ========== Misc Components ========== */
 .mx-cat{background:#e8f0fe !important;color:#1a73e8;font-weight:700 !important;font-size:9px !important;text-transform:uppercase;letter-spacing:.5px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 </style>
 </head>
 <body>
@@ -511,8 +512,19 @@ async function startAll(id){
               p.modelName=ev.model_name;
               updatePairHeader(t,pi);
             }
-            else if(ev.type==='result'){p.results.push(ev);appendResultRow(t,pi,ev)}
+            else if(ev.type==='result'){
+              // 检查是否已有 pending 条目（由 item_pending 创建），有则就地更新
+              const pendingIdx=p.results.findIndex(r=>r._pending&&r.item===ev.item);
+              if(pendingIdx>=0){Object.assign(p.results[pendingIdx],ev);p.results[pendingIdx]._pending=false;}
+              else{p.results.push(ev);}
+              appendResultRow(t,pi,ev);
+            }
             else if(ev.type==='result_update'){updateResultRow(t,pi,ev)}
+            else if(ev.type==='item_pending'){
+              // AI开始分析此条目，立即显示“分析中”占位行
+              p.results.push({item:ev.item,is_bo:null,confidence:'pending',reason:'',rules_check:[],_pending:true,index:ev.index});
+              appendPendingRow(t,pi,ev);
+            }
             else if(ev.type==='thinking_start'){
               const ct=getThinkCt(t,pi);
               if(ct){
@@ -631,10 +643,45 @@ function formatThinking(text){
     .replace(/✓/g,'<span style="color:#2e7d32;font-weight:700">✓</span>')
     .replace(/✗/g,'<span style="color:#c62828;font-weight:700">✗</span>');
 }
-function appendResultRow(t,pi,ev){
-  // 列表视图追加
+function appendPendingRow(t,pi,ev){
+  // 列表视图：创建“分析中”占位行
   const tb=document.getElementById(`tb-${t.id}-${pi}`);
   if(tb){
+    const p=t.pairs[pi];const ri=p.results.length-1;
+    const tr1=document.createElement('tr');tr1.className='new pending-row';
+    tr1.dataset.itemName=ev.item;
+    tr1.innerHTML=`<td></td><td>${p.results.length}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg bdg-u" style="animation:pulse 1.2s infinite">⏳ 分析中</span></td><td></td><td style="color:#999;font-size:11px">AI正在思考...</td><td></td>`;
+    const tr2=document.createElement('tr');tr2.className='detail-row';tr2.style.display='none';
+    tr2.innerHTML='<td colspan="7"></td>';
+    tb.appendChild(tr1);tb.appendChild(tr2);
+    tr1.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+  // 矩阵视图：创建待分析行（全?）
+  appendMatrixPendingRow(t,pi,ev);
+}
+function appendResultRow(t,pi,ev){
+  // 检查是否已有 pending 行，有则就地更新而不是新建
+  const tb=document.getElementById(`tb-${t.id}-${pi}`);
+  if(tb){
+    const pendingTr=tb.querySelector(`tr.pending-row[data-item-name="${CSS.escape(ev.item)}"]`);
+    if(pendingTr){
+      const p=t.pairs[pi];const ri=p.results.findIndex(r=>r.item===ev.item);
+      const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
+      const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
+      const cc=ev.confidence==='high'?'cf-h':ev.confidence==='medium'?'cf-m':'cf-l';
+      const ct=ev.confidence==='high'?'高':ev.confidence==='medium'?'中':'低';
+      pendingTr.classList.remove('pending-row');pendingTr.className='new';
+      pendingTr.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${ri+1}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
+      const detailRow=pendingTr.nextElementSibling;
+      if(detailRow&&detailRow.classList.contains('detail-row')){
+        detailRow.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
+      }
+      pendingTr.scrollIntoView({behavior:'smooth',block:'nearest'});
+      // 矩阵视图也更新
+      updateMatrixCells(t,pi,ri,ev);
+      return;
+    }
+    // 无 pending 行，正常新建
     const p=t.pairs[pi];const ri=p.results.length-1;
     const bdg=ev.is_bo===true?'bdg-y':ev.is_bo===false?'bdg-n':'bdg-u';
     const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
@@ -1101,6 +1148,41 @@ function appendMatrixRow(t,pi,ev){
   tr.innerHTML=cells;
   const placeholder=tbody.querySelector('td[colspan]');
   if(placeholder)placeholder.parentElement.remove();
+  tbody.appendChild(tr);
+  tr.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// 矩阵视图：创建待分析行（item_pending时调用，全?占位）
+function appendMatrixPendingRow(t,pi,ev){
+  const tbl=document.getElementById('mxtbl-'+t.id+'-'+pi);
+  if(!tbl)return;
+  const tbody=tbl.querySelector('tbody');
+  if(!tbody)return;
+  const p=t.pairs[pi];
+  const ri=p.results.length-1;
+  const allR=RN[p.elementType]||[];
+  // 检查是否已有rule_check创建的行
+  const existingRow=tbody.querySelector(`tr[data-item-idx="${ri}"]`);
+  if(existingRow){
+    // rule_check已创建行，加上“分析中”标记
+    const firstTd=existingRow.children[0];
+    if(firstTd)firstTd.innerHTML=`<b>${esc(ev.item)}</b> <span class="bdg bdg-u" style="font-size:9px;animation:pulse 1.2s infinite">⏳</span>`;
+    return;
+  }
+  if(!allR.length)return;
+  const tr=document.createElement('tr');
+  tr.id='mxrow-'+t.id+'-'+pi+'-'+ri;
+  tr.dataset.itemIdx=ri;
+  tr.className='new';
+  let cells=`<td><b>${esc(ev.item)}</b> <span class="bdg bdg-u" style="font-size:9px;animation:pulse 1.2s infinite">⏳</span></td>`;
+  allR.forEach(rn=>{
+    const key=t.id+'_'+pi+'_'+ri+'_'+rn;
+    _cellData[key]={item:ev.item,rule:rn,pass:null,reason:'等待分析...',elementType:p.elementType};
+    cells+=`<td><span class="mx-c mx-unk" onclick="showCellDetail('${key}')" title="${esc(rn)}">?</span></td>`;
+  });
+  tr.innerHTML=cells;
+  const ph=tbody.querySelector('td[colspan]');
+  if(ph)ph.parentElement.remove();
   tbody.appendChild(tr);
   tr.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
