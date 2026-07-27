@@ -483,6 +483,29 @@ window.addEventListener('beforeunload',function(e){
   const running=Object.values(tasks).some(t=>t.st==='running');
   if(running){e.preventDefault();e.returnValue=''}
 });
+// 全局 Ctrl+V 粘贴图片识别
+document.addEventListener('paste',function(e){
+  if(!activeTaskId||!tasks[activeTaskId])return;
+  const t=tasks[activeTaskId];
+  // 只在配置页且图片模式时处理粘贴
+  if(t.st!=='config'||t._uploadMode!=='image')return;
+  // 如果焦点在输入框中，不拦截粘贴
+  const ae=document.activeElement;
+  if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.isContentEditable))return;
+  const items=e.clipboardData?.items;
+  if(!items)return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      e.preventDefault();
+      const blob=item.getAsFile();
+      if(!blob)return;
+      // 包装成类似 input 对象
+      const fakeInput={files:[blob],previousElementSibling:document.getElementById('img-z-'+t.id)};
+      doImageUpload(t.id,fakeInput);
+      return;
+    }
+  }
+});
 function showPg(n){document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('on'));document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));const idx=n==='tasks'?1:n==='single'?2:n==='rules'?3:n==='kb'?4:5;document.querySelector(`.nav button:nth-child(${idx})`).classList.add('on');document.getElementById('pg-'+n).classList.add('on');if(n==='kb')loadKB()}
 function toggleSidebar(){const sb=document.getElementById('sidebar');sb.classList.toggle('collapsed');const btn=sb.querySelector('.sb-toggle');btn.textContent=sb.classList.contains('collapsed')?'▶':'◀'}
 
@@ -563,7 +586,7 @@ function rConfig(t){
   const mode = t._uploadMode || 'excel';
   let h=`<div class="upload-tabs"><button class="${mode==='excel'?'on':''}" onclick="tasks[${t.id}]._uploadMode='excel';render(tasks[${t.id}])">📊 Excel 文件上传</button><button class="${mode==='image'?'on':''}" onclick="tasks[${t.id}]._uploadMode='image';render(tasks[${t.id}])">🖼️ 图片识别提取</button></div>`;
   if(mode==='image'){
-    h+=`<div class="img-upload-z" id="img-z-${t.id}" onclick="document.getElementById('imgf${t.id}').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="event.preventDefault();this.classList.remove('drag-over');handleImgDrop(${t.id},event)"><div class="ic">🖼️</div><div>点击或拖拽上传图片</div><p>支持 jpg/png/webp，AI 自动提取图片中的数据建模术语</p></div><input type="file" id="imgf${t.id}" accept="image/*" style="display:none" onchange="doImageUpload(${t.id},this)">`;
+    h+=`<div class="img-upload-z" id="img-z-${t.id}" onclick="document.getElementById('imgf${t.id}').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="event.preventDefault();this.classList.remove('drag-over');handleImgDrop(${t.id},event)" tabindex="0"><div class="ic">🖼️</div><div>点击/拖拽上传图片，或 <b>Ctrl+V</b> 粘贴截图</div><p>支持 jpg/png/webp，AI 自动提取图片中的数据建模术语</p></div><input type="file" id="imgf${t.id}" accept="image/*" style="display:none" onchange="doImageUpload(${t.id},this)">`;
     if(t._imgPreview) h+=`<img src="${t._imgPreview}" class="img-preview" alt="预览">`;
   } else {
     h+=`<div class="upload-z" id="upload-z-${t.id}" onclick="document.getElementById('f${t.id}').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="event.preventDefault();this.classList.remove('drag-over');handleDrop(${t.id},event)"><div class="ic">📁</div><div>点击或拖拽上传 <b>.xlsx</b></div><p>上传后展示所有子表和列，支持多列同时识别</p></div><input type="file" id="f${t.id}" accept=".xlsx,.xls" style="display:none" onchange="doUpload(${t.id},this)">`;
@@ -710,7 +733,7 @@ function handleImgDrop(id,ev){
 }
 async function doImageUpload(id,inp){
   const f=inp.files[0];if(!f)return;
-  const t=tasks[id];t.file=f.name;
+  const t=tasks[id];t.file=f.name||'粘贴的截图.png';
   // Show preview
   const reader=new FileReader();
   reader.onload=e=>{t._imgPreview=e.target.result};
@@ -719,7 +742,7 @@ async function doImageUpload(id,inp){
   const zone=document.getElementById('img-z-'+id);
   if(zone)zone.innerHTML=`<div class="ic">⏳</div><div>AI 正在识别图片中的术语...</div><p>请稍候，通常需要 5~15 秒</p>`;
   renderSidebar();
-  const fd=new FormData();fd.append('file',f);
+  const fd=new FormData();fd.append('file',f,f.name||'screenshot.png');
   try{
     const r=await fetch('/api/recognize-image',{method:'POST',body:fd});
     const d=await r.json();
