@@ -21,12 +21,12 @@ import kb
 
 app = FastAPI(title="数据建模识别智能体", version="1.0.0", description="多元素并发识别 · 流式思考 · 手动纠正 · 知识库学习")
 
-# CORS 支持（方便后续前后端分离）
+# CORS 支持（同源部署无需开放全部来源）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:8005")],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -36,6 +36,27 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+# 上传文件保留天数，超过自动清理
+UPLOAD_MAX_AGE_DAYS = int(os.getenv("UPLOAD_MAX_AGE_DAYS", 3))
+
+
+def _cleanup_old_uploads():
+    """清理过期的上传文件"""
+    import time
+    now = time.time()
+    cutoff = now - UPLOAD_MAX_AGE_DAYS * 86400
+    for f in UPLOAD_DIR.iterdir():
+        if f.is_file() and f.stat().st_mtime < cutoff:
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+
+@app.on_event("startup")
+async def on_startup():
+    _cleanup_old_uploads()
 
 
 # ============================================================
@@ -116,7 +137,7 @@ async def parse_excel(file: UploadFile = File(...)):
 
     result = parse_excel_file(str(save_path))
     if "error" in result:
-        return result
+        return JSONResponse(result, status_code=400)
 
     result["file_id"] = file_id
     result["file_name"] = file.filename

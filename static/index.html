@@ -187,6 +187,9 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 /* ========== Misc Components ========== */
 .mx-cat{background:#e8f0fe !important;color:#1a73e8;font-weight:700 !important;font-size:9px !important;text-transform:uppercase;letter-spacing:.5px}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.low-conf{background:#fff8e1 !important}
+.low-conf:hover{background:#fff3cd !important}
+.eta-time{color:#1a73e8;font-weight:500}
 </style>
 </head>
 <body>
@@ -386,8 +389,13 @@ function rSelect(t){
     h+=`</div>`;
   }
   if(t.pairs.length){
+    // 自动推荐batch_size：根据最大unique_count智能计算
+    const maxUnique=Math.max(...t.pairs.map(p=>{const sh=t.sheets.find(s=>s.name===p.sheet);const col=sh?.columns.find(c=>c.name===p.column);return col?.unique_count||15}));
+    const recBS=Math.max(3,Math.min(8,Math.ceil(maxUnique/6)+2));
+    t._batchSize=recBS;
     h+=`<div style="margin-top:10px;padding:10px;background:#f0f7ff;border-radius:6px;font-size:12px">已选 <b>${t.pairs.length}</b> 列：`;
     t.pairs.forEach(p=>{h+=`<span class="tag" style="margin:2px">${esc(p.column)} → ${esc(p.elementType)}</span> `});
+    h+=`<div style="margin-top:6px;color:#666">📦 推荐批次大小：<b>${recBS}</b> 条/批（根据最大 ${maxUnique} 项计算）<button class="btn btn-o" style="padding:1px 8px;font-size:10px;margin-left:6px" onclick="adjBS(${t.id})">调整</button></div>`;
     h+=`</div><div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-p" onclick="startAll(${t.id})">🚀 开始识别</button><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
   }else{
     h+=`<div style="margin-top:10px;color:#999;font-size:12px">请勾选至少一列进行识别</div><div style="margin-top:8px"><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
@@ -401,7 +409,7 @@ function rRunning(t){
     const done=p.results?.length||0;
     const pct=total>0?Math.round(done/total*100):0;
     h+=`<div class="pair" id="pair-${t.id}-${pi}"><div class="pair-hd"><span class="pair-title">📋 ${esc(p.column)} → ${esc(p.elementType)}</span><div style="display:flex;align-items:center;gap:6px">${p.modelName?`<span style="font-size:10px;padding:2px 8px;background:#e3f2fd;color:#1565c0;border-radius:4px">🧠 ${esc(p.modelName)}</span>`:''}<span class="bdg ${p.status==='done'?'bdg-y':'bdg-u'}" style="font-size:10px">${p.status==='done'?'完成':p.status==='running'?`${done}/${total}`:'等待'}</span></div></div>`;
-    h+=`<div class="prog-t"><div class="prog-f" id="pf-${t.id}-${pi}" style="width:${pct}%"></div></div><div class="prog-txt"><span>${done<total?'⏳ 分析中...':'✅ 完成'}</span><span>${pct}%</span></div>`;
+    h+=`<div class="prog-t"><div class="prog-f" id="pf-${t.id}-${pi}" style="width:${pct}%"></div></div><div class="prog-txt"><span>${done<total?'⏳ 分析中...':'✅ 完成'}</span><span>${pct}% <span class="eta-time" id="eta-${t.id}-${pi}"></span></span></div>`;
     if(p.summary){const s=p.summary;h+=`<div class="stats"><div class="st st-t"><div class="n">${s.total}</div><div class="l">总计</div></div><div class="st st-y"><div class="n">${s.is_bo}</div><div class="l">✅ 是</div></div><div class="st st-n"><div class="n">${s.not_bo}</div><div class="l">❌ 不是</div></div><div class="st st-u"><div class="n">${s.unknown}</div><div class="l">⚠️ 待人工</div></div></div>`}
     // View toggle buttons
     h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0"><div class="view-toggle"><button class="${viewMode==='list'?'on':''}" onclick="switchView('list')">☰ 列表视图</button><button class="${viewMode==='matrix'?'on':''}" onclick="switchView('matrix')">▦ 规则矩阵</button></div></div>`;
@@ -419,7 +427,7 @@ function rRunning(t){
         const btxt=r.is_bo===true?'✅ 是':r.is_bo===false?'❌ 不是':'⚠️ 待定';
         const cc=r.confidence==='high'?'cf-h':r.confidence==='medium'?'cf-m':'cf-l';
         const ct=r.confidence==='high'?'高':r.confidence==='medium'?'中':'低';
-        h+=`<tr><td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${ri+1}</td><td><b>${esc(r.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(r.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td></tr>`;
+        h+=`<tr${r.confidence==='low'?' class="low-conf"':''}><td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${ri+1}</td><td><b>${esc(r.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(r.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td></tr>`;
         h+=`<tr class="detail-row" style="display:none"><td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, r.rules_check)}</div></td></tr>`;
       });
     }
@@ -439,6 +447,7 @@ function rRunning(t){
 // Task Actions: 上传、列选择、启动识别
 // ============================================================
 function tSetType(id,t){tasks[id].et=t;render(tasks[id])}
+function adjBS(id){const t=tasks[id];const v=prompt('设置每批识别条数（推荐3-8，越大越快但可能降低准确度）：',t._batchSize||5);if(v===null)return;const n=parseInt(v);if(isNaN(n)||n<1||n>20){alert('请输入 1~20 之间的整数');return}t._batchSize=n;render(t)}
 function tReset(id){const t=tasks[id];t.st='config';t.pairs=[];t.sheets=[];t.error=null;render(t);renderSidebar()}
 function selSheet(id,name){tasks[id].selSheet=name;render(tasks[id])}
 
@@ -479,8 +488,11 @@ function pairType(id,i,t){tasks[id].pairs[i].elementType=t;render(tasks[id])}
 
 async function startAll(id){
   const t=tasks[id];t.st='running';render(t);renderSidebar();
+  const bs=t._batchSize||5; // 使用推荐的batch_size
   const promises=t.pairs.map(async(p,pi)=>{
     p.status='running';p.results=[];p.summary=null;p.thinkingText='';p.thinkingDone=false;p.modelName=null;
+    // ETA计时变量
+    p._batchStart=null;p._batchTimes=[];p._batchIdx=-1;
     // 立即显示等待状态（解决豆包首token延迟问题）
     const ct=getThinkCt(t,pi);
     if(ct){ct.classList.remove('hidden');ct.innerHTML='<div style="color:#1a73e8;font-size:12px">⏳ 正在连接AI模型，请稍候...</div>';const box=ct.closest('.think-box');if(box){const ar=box.querySelector('.raw-arrow');if(ar)ar.textContent='▼'}}
@@ -498,7 +510,7 @@ async function startAll(id){
     }catch(e){p.items=[];p.status='error';return}
     if(!p.items.length){p.status='done';p.summary={total:0,is_bo:0,not_bo:0,unknown:0};p.thinkingDone=true;return}
     try{
-      const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:5,model_id:getModelId(),context_map:p._contextMap})});
+      const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:bs,model_id:getModelId(),context_map:p._contextMap})});
       const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
       while(true){
         const{done,value}=await reader.read();if(done)break;
@@ -526,6 +538,8 @@ async function startAll(id){
               appendPendingRow(t,pi,ev);
             }
             else if(ev.type==='thinking_start'){
+              // ETA计时：记录批次开始时间
+              p._batchStart=Date.now();p._batchIdx=ev.batch_index;
               const ct=getThinkCt(t,pi);
               if(ct){
                 if(!p.thinkingText){ct.innerHTML='';/* clear placeholder */}
@@ -576,6 +590,24 @@ async function startAll(id){
                 if(b)b.textContent=b.textContent.replace('思考中...','✅ 完成');
               }
               p._thinkBatchSpan=null;
+              // ETA计时：记录批次耗时，计算剩余时间
+              if(p._batchStart){
+                const elapsed=Date.now()-p._batchStart;
+                p._batchTimes.push(elapsed);
+                const avg=p._batchTimes.reduce((a,b)=>a+b,0)/p._batchTimes.length;
+                const bs=t._batchSize||5;
+                const totalItems=p.items?.length||0;
+                const doneItems=(ev.batch_index!==undefined?(ev.batch_index+1)*bs:0);
+                const remainItems=Math.max(0,totalItems-doneItems);
+                const remainBatches=Math.ceil(remainItems/bs);
+                const etaEl=document.getElementById(`eta-${t.id}-${pi}`);
+                if(etaEl){
+                  if(remainBatches>0){
+                    const etaSec=Math.round(avg*remainBatches/1000);
+                    etaEl.textContent=etaSec>=60?`预计还需 ~${Math.ceil(etaSec/60)}分钟`:`预计还需 ~${etaSec}s`;
+                  } else { etaEl.textContent=''; }
+                }
+              }
             }
             else if(ev.type==='rule_check'){
               updateSingleMatrixCell(t,pi,ev);
@@ -584,7 +616,7 @@ async function startAll(id){
               const el=document.getElementById(`pf-${t.id}-${pi}`);
               if(el){const pct=ev.total>0?Math.round(ev.current/ev.total*100):0;el.style.width=pct+'%'}
             }
-            else if(ev.type==='done'){p.summary=ev.summary;p.status='done';p.thinkingDone=true;updateThinkStatus(t,pi,'✅ 思考完成')}
+            else if(ev.type==='done'){p.summary=ev.summary;p.status='done';p.thinkingDone=true;updateThinkStatus(t,pi,'✅ 思考完成');const etaEl=document.getElementById(`eta-${t.id}-${pi}`);if(etaEl)etaEl.textContent=''}
           }catch(e){}
         }
       }
@@ -637,11 +669,18 @@ function formatThinking(text){
     if(m.includes('"results"')&&(m.includes('"item"')||m.includes('"is_bo"')))return '';
     return m;
   });
-  return esc(text.trim())
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/`(.+?)`/g,'<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px">$1</code>')
-    .replace(/✓/g,'<span style="color:#2e7d32;font-weight:700">✓</span>')
-    .replace(/✗/g,'<span style="color:#c62828;font-weight:700">✗</span>');
+  // 先转义再替换markdown标记，确保用户内容不会被当作HTML注入
+  let safe = esc(text.trim());
+  // 只匹配非HTML标签内容作为bold/code的内容（防止嵌套注入）
+  safe = safe.replace(/\*\*(.+?)\*\*/g, function(_, inner){
+    return '<strong>' + inner.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</strong>';
+  });
+  safe = safe.replace(/`(.+?)`/g, function(_, inner){
+    return '<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px">' + inner.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</code>';
+  });
+  safe = safe.replace(/✓/g,'<span style="color:#2e7d32;font-weight:700">✓</span>');
+  safe = safe.replace(/✗/g,'<span style="color:#c62828;font-weight:700">✗</span>');
+  return safe;
 }
 function appendPendingRow(t,pi,ev){
   // 列表视图：创建“分析中”占位行
@@ -670,7 +709,7 @@ function appendResultRow(t,pi,ev){
       const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
       const cc=ev.confidence==='high'?'cf-h':ev.confidence==='medium'?'cf-m':'cf-l';
       const ct=ev.confidence==='high'?'高':ev.confidence==='medium'?'中':'低';
-      pendingTr.classList.remove('pending-row');pendingTr.className='new';
+      pendingTr.classList.remove('pending-row');pendingTr.className='new'+(ev.confidence==='low'?' low-conf':'');
       pendingTr.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${ri+1}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
       const detailRow=pendingTr.nextElementSibling;
       if(detailRow&&detailRow.classList.contains('detail-row')){
@@ -687,7 +726,7 @@ function appendResultRow(t,pi,ev){
     const btxt=ev.is_bo===true?'✅ 是':ev.is_bo===false?'❌ 不是':'⚠️ 待定';
     const cc=ev.confidence==='high'?'cf-h':ev.confidence==='medium'?'cf-m':'cf-l';
     const ct=ev.confidence==='high'?'高':ev.confidence==='medium'?'中':'低';
-    const tr1=document.createElement('tr');tr1.className='new';
+    const tr1=document.createElement('tr');tr1.className='new'+(ev.confidence==='low'?' low-conf':'');
     tr1.innerHTML=`<td><button class="expand-btn" onclick="toggleDetail(this)">▶</button></td><td>${p.results.length}</td><td><b>${esc(ev.item)}</b></td><td><span class="bdg ${bdg}">${btxt}</span></td><td><span class="cf ${cc}">${ct}</span></td><td>${esc(ev.reason||'')}</td><td><button class="btn btn-g btn-s" onclick="markCorrect(${t.id},${pi},${ri},true)">✓</button> <button class="btn btn-r btn-s" onclick="markCorrect(${t.id},${pi},${ri},false)">✗</button></td>`;
     const tr2=document.createElement('tr');tr2.className='detail-row';tr2.style.display='none';
     tr2.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
@@ -730,6 +769,7 @@ function updateResultRow(t,pi,ev){
         detailRow.innerHTML=`<td colspan="7"><div class="rules-detail">${renderRulesDetail(p.elementType, ev.rules_check)}</div></td>`;
       }
       tr1.classList.add('new');
+      if(ev.confidence==='low')tr1.classList.add('low-conf');else tr1.classList.remove('low-conf');
     }
   }
   // 矩阵视图也更新
@@ -873,7 +913,7 @@ function renderMatrixView(t,pi){
     p.results.forEach((r,ri)=>{
       const bdg=r.is_bo===true?'bdg-y':r.is_bo===false?'bdg-n':'bdg-u';
       const btxt=r.is_bo===true?'✅ 是':r.is_bo===false?'❌ 不是':'⚠️ 待定';
-      h+=`<tr><td><b>${esc(r.item)}</b> <span class="bdg ${bdg}" style="font-size:9px">${btxt}</span></td>`;
+      h+=`<tr${r.confidence==='low'?' class="low-conf"':''}><td><b>${esc(r.item)}</b> <span class="bdg ${bdg}" style="font-size:9px">${btxt}</span></td>`;
       allR.forEach(rn=>{
         const rc=findRuleCheck(r.rules_check,rn);
         const key=`${t.id}_${pi}_${ri}_${rn}`;
@@ -1225,6 +1265,7 @@ function updateMatrixCells(t,pi,ri,ev){
     }
   });
   tr.classList.add('new');
+  if(ev.confidence==='low')tr.classList.add('low-conf');else tr.classList.remove('low-conf');
 }
 
 // ============================================================

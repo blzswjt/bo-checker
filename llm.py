@@ -146,23 +146,30 @@ def chat(messages: list[dict], temperature: float = 0.3, model_id: str = None, t
         raise
 
 
-def chat_stream(messages: list[dict], temperature: float = 0.3, model_id: str = None):
+def chat_stream(messages: list[dict], temperature: float = 0.3, model_id: str = None, max_retries: int = 1):
     """流式调用 LLM，逐步 yield 文本片段。支持自动重试一次"""
     mid = model_id or _default_model_id
     cfg = _get_model_config(mid)
-    client = _get_client(mid)
-    try:
-        stream = client.chat.completions.create(
-            model=cfg["model"],
-            messages=messages,
-            temperature=temperature,
-            stream=True,
-        )
-        for chunk in stream:
-            delta = chunk.choices[0].delta
-            if delta.content:
-                yield delta.content
-    except Exception as e:
-        # 清除缓存客户端，下次重新创建
-        _clients.pop(mid, None)
-        raise RuntimeError(f"LLM流式调用失败 ({cfg['name']}): {e}")
+    last_error = None
+
+    for attempt in range(max_retries + 1):
+        client = _get_client(mid)
+        try:
+            stream = client.chat.completions.create(
+                model=cfg["model"],
+                messages=messages,
+                temperature=temperature,
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    yield delta.content
+            return  # 成功完成，直接返回
+        except Exception as e:
+            last_error = e
+            # 清除缓存客户端，下次重新创建
+            _clients.pop(mid, None)
+            if attempt < max_retries:
+                continue  # 重试
+            raise RuntimeError(f"LLM流式调用失败 ({cfg['name']}): {last_error}")

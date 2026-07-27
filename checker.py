@@ -10,11 +10,29 @@
 """
 import json
 import re
+import time
 import pandas as pd
 from pathlib import Path
 from llm import chat, chat_stream, get_model_display_name
 from rules import build_batch_prompt, build_check_prompt, ELEMENT_TYPES, recommend_element_type
 import kb
+
+# ============================================================
+# 0. Excel 文件缓存（避免同一文件被反复读取）
+# ============================================================
+_excel_cache: dict[str, tuple[float, dict[str, pd.DataFrame]]] = {}
+_CACHE_TTL = 300  # 缓存有效期（秒）
+
+
+def _get_all_sheets(file_path: str) -> dict[str, pd.DataFrame]:
+    """带缓存地读取 Excel 所有子表"""
+    now = time.time()
+    cached = _excel_cache.get(file_path)
+    if cached and now - cached[0] < _CACHE_TTL:
+        return cached[1]
+    all_sheets = pd.read_excel(file_path, sheet_name=None)
+    _excel_cache[file_path] = (now, all_sheets)
+    return all_sheets
 
 # ============================================================
 # 1. Excel解析
@@ -82,7 +100,7 @@ def parse_excel_file(file_path: str) -> dict:
         return {"error": "文件不存在"}
 
     try:
-        all_sheets = pd.read_excel(file_path, sheet_name=None)
+        all_sheets = _get_all_sheets(file_path)
     except Exception as e:
         return {"error": f"读取Excel失败: {str(e)}"}
 
@@ -129,19 +147,19 @@ def parse_excel_file(file_path: str) -> dict:
             "columns": columns,
         })
 
-        # AI推荐：在所有子表中找最佳匹配列
-        for kw in all_keywords:
-            for col_info in columns:
-                if kw in col_info["name"] and col_info["rows"] > 0:
-                    if ai_column is None or len(col_info["sample"]) > 0:
+        # AI推荐：在所有子表中找最佳匹配列（优先匹配高优先级关键词，找到即停止）
+        if ai_column is None:
+            for kw in all_keywords:
+                found = False
+                for col_info in columns:
+                    if kw in col_info["name"] and col_info["rows"] > 0:
                         ai_sheet = sheet_name
                         ai_column = col_info["name"]
                         ai_keyword = kw
-                    break
-            if ai_column and ai_keyword in all_keywords[:3]:
-                break
-        if ai_column and ai_keyword in all_keywords[:3]:
-            break
+                        found = True
+                        break
+                if found:
+                    break  # 已找到当前最高优先级关键词，停止搜索
 
     return {
         "total_sheets": len(all_sheets),
@@ -156,7 +174,7 @@ def parse_excel_file(file_path: str) -> dict:
 
 def extract_column_values(file_path: str, sheet_name: str, column_name: str) -> list[str]:
     """从Excel中提取指定子表指定列的所有非空值（去重）"""
-    all_sheets = pd.read_excel(file_path, sheet_name=None)
+    all_sheets = _get_all_sheets(file_path)
     df = all_sheets.get(sheet_name)
     if df is None or df.empty:
         return []
@@ -179,7 +197,7 @@ def extract_item_context(file_path: str, sheet_name: str, column_name: str) -> d
     从Excel中提取每个条目的业务上下文（L1/L2/L3/定义）。
     返回 {item_name: {l1, l2, l3, definition}} 映射，用于增强AI识别准确率。
     """
-    all_sheets = pd.read_excel(file_path, sheet_name=None)
+    all_sheets = _get_all_sheets(file_path)
     df = all_sheets.get(sheet_name)
     if df is None or df.empty:
         return {}
@@ -361,7 +379,7 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
     # 获取知识库示例
     kb_examples = kb.get_examples(element_type)
 
-    all_results = []
+    all_results: dict[str, dict] = {}  # {item_name: result_dict} O(1) 查找
 
     for i in range(0, total, batch_size):
         batch = items[i:i + batch_size]
@@ -371,7 +389,7 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
         if not prompt:
             for j, item in enumerate(batch):
                 result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"未知元素类型: {element_type}", "rules_check": []}
-                all_results.append(result)
+                all_results[item] = result
                 yield {"type": "result", "index": i + j, **result}
             yield {"type": "progress", "current": min(i + len(batch), total), "total": total}
             continue
@@ -436,7 +454,8 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                                     if _item_idx not in _pending_items and _item_idx not in emitted_indices:
                                         _pending_items.add(_item_idx)
                                         emitted_indices.add(_item_idx)
-                                        all_results.append({"item": batch[_item_idx], "is_bo": None, "confidence": "pending", "reason": "", "rules_check": []})
+                                        _pending_item = {"item": batch[_item_idx], "is_bo": None, "confidence": "pending", "reason": "", "rules_check": []}
+                                        all_results[batch[_item_idx]] = _pending_item
                                         yield {"type": "item_pending", "index": i + _item_idx, "item": batch[_item_idx], "batch_index": batch_idx}
                         _item_scan_pos = _new_end
 
@@ -450,13 +469,12 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                             if c['conclusion'] and c['idx'] in emitted_indices:
                                 con = c['conclusion']
                                 item_name = batch[c['idx']]
-                                # 更新 all_results 中已有的 pending 记录
-                                for ar in all_results:
-                                    if ar.get('item') == item_name and ar.get('confidence') == 'pending':
-                                        ar['is_bo'] = con['is_bo']
-                                        ar['confidence'] = con['confidence']
-                                        ar['reason'] = con['reason']
-                                        break
+                                # 更新 all_results 中已有的 pending 记录（O(1)查找）
+                                ar = all_results.get(item_name)
+                                if ar and ar.get('confidence') == 'pending':
+                                    ar['is_bo'] = con['is_bo']
+                                    ar['confidence'] = con['confidence']
+                                    ar['reason'] = con['reason']
                                 yield {"type": "result_update", "index": i + c['idx'],
                                        "item": item_name, "is_bo": con['is_bo'],
                                        "confidence": con['confidence'], "reason": con['reason'],
@@ -480,43 +498,44 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
                     # 已通过思考发射过
                     # 关键：如果JSON解析失败(is_bo=None)，保留流式解析的结论
                     if full_result['is_bo'] is None:
-                        for ar in all_results:
-                            if ar.get('item') == item_name and ar.get('is_bo') is not None:
-                                # 流式解析已有结论，只更新rules_check
-                                if full_result.get('rules_check'):
-                                    ar['rules_check'] = full_result['rules_check']
-                                break
-                        else:
+                        ar = all_results.get(item_name)
+                        if ar and ar.get('is_bo') is not None:
+                            # 流式解析已有结论，只更新rules_check
+                            if full_result.get('rules_check'):
+                                ar['rules_check'] = full_result['rules_check']
+                        elif ar:
                             # 流式也没有，发送更新
-                            for ar in all_results:
-                                if ar.get('item') == item_name:
-                                    ar.update(full_result)
-                                    break
+                            ar.update(full_result)
+                            yield {"type": "result_update", "index": i + j, **full_result}
+                        else:
+                            all_results[item_name] = full_result
                             yield {"type": "result_update", "index": i + j, **full_result}
                     else:
                         # JSON有有效结论，发送更新
-                        for ar in all_results:
-                            if ar.get('item') == item_name:
-                                ar.update(full_result)
-                                break
+                        ar = all_results.get(item_name)
+                        if ar:
+                            ar.update(full_result)
+                        else:
+                            all_results[item_name] = full_result
                         yield {"type": "result_update", "index": i + j, **full_result}
                 else:
                     # 未发射过，正常发射
-                    all_results.append(full_result)
+                    all_results[item_name] = full_result
                     yield {"type": "result", "index": i + j, **full_result}
 
         except Exception as e:
             for j, item in enumerate(batch):
                 if j not in emitted_indices:
                     result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"AI分析出错: {str(e)}", "rules_check": []}
-                    all_results.append(result)
+                    all_results[item] = result
                     yield {"type": "result", "index": i + j, **result}
 
         yield {"type": "progress", "current": min(i + len(batch), total), "total": total}
 
-    bo_count = sum(1 for r in all_results if r.get("is_bo") is True)
-    not_bo_count = sum(1 for r in all_results if r.get("is_bo") is False)
-    unknown_count = sum(1 for r in all_results if r.get("is_bo") is None)
+    results_list = list(all_results.values())
+    bo_count = sum(1 for r in results_list if r.get("is_bo") is True)
+    not_bo_count = sum(1 for r in results_list if r.get("is_bo") is False)
+    unknown_count = sum(1 for r in results_list if r.get("is_bo") is None)
 
     yield {
         "type": "done",

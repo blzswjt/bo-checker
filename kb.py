@@ -5,10 +5,12 @@
 - 支持增删改查，持久化到 JSON 文件
 """
 import json
+import threading
 from pathlib import Path
 from datetime import datetime
 
 KB_PATH = Path(__file__).parent / "knowledge.json"
+_kb_lock = threading.Lock()
 
 DEFAULT_KB = {
     "confirmed_examples": {},
@@ -36,56 +38,79 @@ def save(kb: dict):
 
 def add_example(element_type: str, item: str, is_match: bool, reason: str = ""):
     """添加一个已确认的示例到知识库"""
-    kb = load()
+    with _kb_lock:
+        kb = load()
+        if element_type not in kb["confirmed_examples"]:
+            kb["confirmed_examples"][element_type] = []
+
+        examples = kb["confirmed_examples"][element_type]
+
+        # 如果已存在同名项，更新它
+        for ex in examples:
+            if ex["item"] == item:
+                ex["is_match"] = is_match
+                ex["reason"] = reason
+                ex["timestamp"] = datetime.now().isoformat()
+                save(kb)
+                return
+
+        examples.append({
+            "item": item,
+            "is_match": is_match,
+            "reason": reason,
+            "timestamp": datetime.now().isoformat()
+        })
+        save(kb)
+
+
+def remove_example(element_type: str, item: str):
+    """从知识库中删除一个示例"""
+    with _kb_lock:
+        kb = load()
+        if element_type in kb["confirmed_examples"]:
+            kb["confirmed_examples"][element_type] = [
+                ex for ex in kb["confirmed_examples"][element_type]
+                if ex["item"] != item
+            ]
+            save(kb)
+
+
+def add_correction(item: str, element_type: str,
+                   original_result: bool, corrected_result: bool,
+                   reason: str = ""):
+    """记录一次用户的纠正"""
+    with _kb_lock:
+        kb = load()
+        kb["corrections"].append({
+            "item": item,
+            "element_type": element_type,
+            "original": original_result,
+            "corrected": corrected_result,
+            "reason": reason,
+            "timestamp": datetime.now().isoformat()
+        })
+        # 同时把纠正结果加入已确认示例
+        _add_example_unlocked(kb, element_type, item, corrected_result, reason)
+        save(kb)
+
+
+def _add_example_unlocked(kb: dict, element_type: str, item: str, is_match: bool, reason: str = ""):
+    """内部使用：不加锁地添加示例（需在 _kb_lock 内调用）"""
     if element_type not in kb["confirmed_examples"]:
         kb["confirmed_examples"][element_type] = []
-
     examples = kb["confirmed_examples"][element_type]
-
-    # 如果已存在同名项，更新它
     for ex in examples:
         if ex["item"] == item:
             ex["is_match"] = is_match
             ex["reason"] = reason
             ex["timestamp"] = datetime.now().isoformat()
-            save(kb)
             return
-
     examples.append({
         "item": item,
         "is_match": is_match,
         "reason": reason,
         "timestamp": datetime.now().isoformat()
     })
-    save(kb)
-
-
-def remove_example(element_type: str, item: str):
-    """从知识库中删除一个示例"""
-    kb = load()
-    if element_type in kb["confirmed_examples"]:
-        kb["confirmed_examples"][element_type] = [
-            ex for ex in kb["confirmed_examples"][element_type]
-            if ex["item"] != item
-        ]
-        save(kb)
-
-
-def add_correction(item: str, element_type: str,
-                   original_result: bool, corrected_result: bool,
-                   reason: str = ""):
-    """记录一次用户纠正"""
-    kb = load()
-    kb["corrections"].append({
-        "item": item,
-        "element_type": element_type,
-        "original": original_result,
-        "corrected": corrected_result,
-        "reason": reason,
-        "timestamp": datetime.now().isoformat()
-    })
-    # 同时把纠正结果加入已确认示例
-    add_example(element_type, item, corrected_result, reason)
 
 
 def get_examples(element_type: str, max_per_side: int = 8) -> dict:
@@ -116,4 +141,5 @@ def get_all() -> dict:
 
 def update_all(kb_data: dict):
     """整体替换知识库（供前端编辑器保存）"""
-    save(kb_data)
+    with _kb_lock:
+        save(kb_data)
