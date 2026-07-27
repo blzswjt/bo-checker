@@ -55,14 +55,6 @@ MODELS = [
 # 视觉模型配置（用于图片识别提取术语）
 VISION_MODELS = [
     {
-        "id": "doubao-vision",
-        "name": "豆包 Vision",
-        "provider": "ark",
-        "model": os.getenv("VISION_DOUBAO_MODEL", "doubao-1-5-vision-pro-32k-250115"),
-        "base_url": os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
-        "api_key": os.getenv("DOUBAO_API_KEY", ""),
-    },
-    {
         "id": "qwen-vl",
         "name": "通义千问 VL",
         "provider": "openai",
@@ -70,8 +62,16 @@ VISION_MODELS = [
         "base_url": os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
         "api_key": os.getenv("QWEN_API_KEY", ""),
     },
+    {
+        "id": "doubao-vision",
+        "name": "豆包 Vision",
+        "provider": "ark",
+        "model": os.getenv("VISION_DOUBAO_MODEL", "doubao-1-5-vision-pro/250328"),
+        "base_url": os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+        "api_key": os.getenv("DOUBAO_API_KEY", ""),
+    },
 ]
-_default_vision_model_id = os.getenv("DEFAULT_VISION_MODEL", "doubao-vision")
+_default_vision_model_id = os.getenv("DEFAULT_VISION_MODEL", "qwen-vl")
 
 # 缓存客户端
 _clients = {}
