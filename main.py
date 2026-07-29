@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from llm import chat_stream, get_available_models, get_default_model_id, analyze_image, get_vision_models, get_default_vision_model_id
-from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text, get_rule_detail
+from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text, get_rule_detail, get_rules_config, update_rules_config, reset_rules_config
 from checker import parse_excel_file, extract_column_values, extract_item_context, check_items_stream, check_single_item
 import kb
 
@@ -119,6 +119,26 @@ async def get_element_types():
 async def get_rules():
     """返回所有元素类型的规则文本"""
     return {"rules": get_all_rules_text()}
+
+
+@app.get("/api/rules-config")
+async def get_rules_config_api():
+    """返回完整规则配置（含 enabled 状态，用于编辑器）"""
+    return get_rules_config()
+
+
+@app.put("/api/rules-config")
+async def save_rules_config_api(config: dict):
+    """保存规则配置"""
+    update_rules_config(config)
+    return {"ok": True}
+
+
+@app.post("/api/rules-config/reset")
+async def reset_rules_config_api():
+    """重置规则配置为默认值"""
+    reset_rules_config()
+    return {"ok": True, "config": get_rules_config()}
 
 
 # ============================================================

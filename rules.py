@@ -9,6 +9,8 @@
   3. 工具函数: get_all_rules_text, get_rule_detail, recommend_element_type
 """
 import json
+import copy
+from pathlib import Path
 
 # 所有支持的元素类型
 ELEMENT_TYPES = [
@@ -147,6 +149,88 @@ ELEMENT_RULES = {
     },
 }
 
+# 默认规则备份（用于重置）
+_DEFAULT_RULES = copy.deepcopy(ELEMENT_RULES)
+
+# 规则配置文件路径
+_RULES_CONFIG_PATH = Path(__file__).parent / "rules_config.json"
+
+
+def load_rules_config():
+    """从 rules_config.json 加载自定义规则配置，覆盖默认规则"""
+    global ELEMENT_RULES
+    if _RULES_CONFIG_PATH.exists():
+        try:
+            with open(_RULES_CONFIG_PATH, "r", encoding="utf-8") as f:
+                custom = json.load(f)
+            for etype, rules in custom.items():
+                if etype in ELEMENT_RULES:
+                    for key in ["identification", "naming", "definition"]:
+                        if key in rules:
+                            ELEMENT_RULES[etype][key] = rules[key]
+                    if "description" in rules:
+                        ELEMENT_RULES[etype]["description"] = rules["description"]
+                    if "not_examples" in rules:
+                        ELEMENT_RULES[etype]["not_examples"] = rules["not_examples"]
+                    if "disabled" in rules:
+                        ELEMENT_RULES[etype]["disabled"] = rules["disabled"]
+        except Exception:
+            pass
+
+
+def save_rules_config():
+    """将当前 ELEMENT_RULES 保存到 rules_config.json"""
+    data = {}
+    for etype, rules in ELEMENT_RULES.items():
+        data[etype] = {
+            "description": rules.get("description", ""),
+            "identification": rules.get("identification", []),
+            "naming": rules.get("naming", []),
+            "definition": rules.get("definition", []),
+            "not_examples": rules.get("not_examples", []),
+            "disabled": rules.get("disabled", False),
+        }
+    with open(_RULES_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def reset_rules_config():
+    """重置规则为默认值"""
+    global ELEMENT_RULES
+    ELEMENT_RULES = copy.deepcopy(_DEFAULT_RULES)
+    if _RULES_CONFIG_PATH.exists():
+        _RULES_CONFIG_PATH.unlink()
+
+
+def get_rules_config() -> dict:
+    """返回当前完整规则配置"""
+    result = {}
+    for etype, rules in ELEMENT_RULES.items():
+        result[etype] = {
+            "description": rules.get("description", ""),
+            "identification": rules.get("identification", []),
+            "naming": rules.get("naming", []),
+            "definition": rules.get("definition", []),
+            "not_examples": rules.get("not_examples", []),
+            "disabled": rules.get("disabled", False),
+        }
+    return result
+
+
+def update_rules_config(new_config: dict):
+    """用前端传来的配置更新规则"""
+    global ELEMENT_RULES
+    for etype, rules in new_config.items():
+        if etype in ELEMENT_RULES:
+            for key in ["description", "identification", "naming", "definition", "not_examples", "disabled"]:
+                if key in rules:
+                    ELEMENT_RULES[etype][key] = rules[key]
+    save_rules_config()
+
+
+# 启动时加载自定义配置
+load_rules_config()
+
 
 # ============================================================
 # 2. Prompt 构建
@@ -208,10 +292,10 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
     if not rules:
         return ""
 
-    # 规则详情 - 识别规则始终包含
-    id_rules = rules["identification"]
-    nm_rules = rules.get("naming", []) if include_naming else []
-    df_rules = rules.get("definition", []) if include_definition else []
+    # 规则详情 - 识别规则始终包含（过滤掉 enabled=false 的规则）
+    id_rules = [r for r in rules["identification"] if r.get("enabled", True) is not False]
+    nm_rules = [r for r in rules.get("naming", []) if r.get("enabled", True) is not False] if include_naming else []
+    df_rules = [r for r in rules.get("definition", []) if r.get("enabled", True) is not False] if include_definition else []
     
     id_detail = ""
     for i, r in enumerate(id_rules, 1):
@@ -354,14 +438,17 @@ def get_all_rules_text() -> dict:
         parts = [f"# {etype}\n{rules['description']}\n"]
         parts.append("## 识别规则")
         for r in rules["identification"]:
-            parts.append(f"- **{r['rule']}**：{r['desc']}")
+            status = "" if r.get("enabled", True) is not False else " ⛔禁用"
+            parts.append(f"- **{r['rule']}**{status}：{r['desc']}")
         parts.append("\n## 命名规则")
         for r in rules["naming"]:
-            parts.append(f"- **{r['rule']}**：{r['desc']}")
+            status = "" if r.get("enabled", True) is not False else " ⛔禁用"
+            parts.append(f"- **{r['rule']}**{status}：{r['desc']}")
         if rules.get("definition"):
             parts.append("\n## 定义规则")
             for r in rules["definition"]:
-                parts.append(f"- **{r['rule']}**：{r['desc']}")
+                status = "" if r.get("enabled", True) is not False else " ⛔禁用"
+                parts.append(f"- **{r['rule']}**{status}：{r['desc']}")
         if rules.get("not_examples"):
             parts.append("\n## 常见反例")
             for ex in rules["not_examples"]:

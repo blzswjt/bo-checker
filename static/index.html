@@ -321,7 +321,18 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
       </div>
     </div>
     <div class="pg" id="pg-rules">
-      <div class="card"><h3>📋 各元素类型识别规则</h3><div class="rules-tabs" id="rTabs"></div><div class="rules-ct" id="rCt">加载中...</div></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0">📋 各元素类型识别规则</h3>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-o btn-s" id="rEditBtn" onclick="toggleRuleEdit()">✏️ 编辑模式</button>
+            <button class="btn btn-o btn-s" id="rSaveBtn" style="display:none" onclick="saveRulesConfigUI()">💾 保存配置</button>
+            <button class="btn btn-o btn-s" onclick="resetRulesConfig()">↩️ 重置默认</button>
+          </div>
+        </div>
+        <div class="rules-tabs" id="rTabs"></div>
+        <div class="rules-ct" id="rCt">加载中...</div>
+      </div>
     </div>
     <div class="pg" id="pg-kb">
       <div class="card">
@@ -427,6 +438,8 @@ let allRules={};      // 所有规则文本
 let kbData={};        // 知识库数据
 let viewMode='list';  // 视图模式: 'list' | 'matrix'
 let _cellData={};     // 矩阵单元格详情数据
+let rulesConfig={};   // 规则配置（可编辑）
+let _ruleEditMode=false; // 规则编辑模式
 
 function getModelId(){return document.getElementById('modelSel')?.value||null}
 
@@ -472,8 +485,8 @@ function loadTasks(){
 // Init: 加载元素类型、规则、模型列表
 // ============================================================
 async function init(){
-  const[tr,rr,mr]=await Promise.all([fetch('/api/element-types').then(r=>r.json()),fetch('/api/rules').then(r=>r.json()),fetch('/api/models').then(r=>r.json())]);
-  ET=tr.types||[];RN=tr.rule_names||{};sType=ET[0]||'';allRules=rr.rules||{};
+  const[tr,rr,mr,rc]=await Promise.all([fetch('/api/element-types').then(r=>r.json()),fetch('/api/rules').then(r=>r.json()),fetch('/api/models').then(r=>r.json()),fetch('/api/rules-config').then(r=>r.json())]);
+  ET=tr.types||[];RN=tr.rule_names||{};sType=ET[0]||'';allRules=rr.rules||{};rulesConfig=rc||{};
   const ms=document.getElementById('modelSel');ms.innerHTML='';
   (mr.models||[]).forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;if(m.id===mr.default)o.selected=true;ms.appendChild(o)});
   const sr=document.getElementById('sTypeRow');
@@ -1896,6 +1909,108 @@ function renderRulesDetail(elementType, rulesCheck){
   if(!h) h = '<div style="color:#999;font-size:11px">无逐条规则分析数据</div>';
   return h;
 }
+
+// ============================================================
+// 规则配置编辑器
+// ============================================================
+function toggleRuleEdit(){
+  _ruleEditMode=!_ruleEditMode;
+  const btn=document.getElementById('rEditBtn');
+  const saveBtn=document.getElementById('rSaveBtn');
+  if(_ruleEditMode){
+    btn.textContent='👁️ 查看模式';btn.style.background='#e8d5ff';
+    saveBtn.style.display='';
+    renderRulesEditor();
+  }else{
+    btn.textContent='✏️ 编辑模式';btn.style.background='';
+    saveBtn.style.display='none';
+    // 恢复到普通视图
+    const activeTab=document.querySelector('.rules-tab.on');
+    if(activeTab)activeTab.click();
+  }
+}
+
+function renderRulesEditor(){
+  const rt=document.getElementById('rTabs');
+  const rc=document.getElementById('rCt');
+  rt.innerHTML='';
+  let first=true;
+  for(const etype of Object.keys(rulesConfig)){
+    const b=document.createElement('button');
+    b.className='rules-tab'+(first?' on':'');
+    b.textContent=etype;
+    b.onclick=()=>{
+      rt.querySelectorAll('.rules-tab').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      renderRulesEditorContent(etype);
+    };
+    rt.appendChild(b);
+    if(first){renderRulesEditorContent(etype);first=false}
+  }
+}
+
+function renderRulesEditorContent(etype){
+  const cfg=rulesConfig[etype];if(!cfg)return;
+  const rc=document.getElementById('rCt');
+  let h=`<div style="margin-bottom:10px;padding:8px 12px;background:#f8f0ff;border-radius:6px"><b>📝 类型描述：</b><input type="text" value="${esc(cfg.description||'')}" onchange="rulesConfig['${etype}'].description=this.value" style="width:80%;padding:4px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:12px;margin-left:6px"></div>`;
+  for(const cat of ['identification','naming','definition']){
+    const catName={identification:'识别规则',naming:'命名规则',definition:'定义规则'}[cat];
+    const rules=cfg[cat]||[];
+    if(!rules.length)continue;
+    h+=`<div style="margin:10px 0 4px;font-weight:600;color:#5f2d91;font-size:13px">${catName}（${rules.length}条）</div>`;
+    rules.forEach((r,i)=>{
+      const enabled=r.enabled!==false;
+      h+=`<div style="padding:8px 12px;margin:4px 0;border:1px solid ${enabled?'#d0bfff':'#e0e0e0'};border-radius:6px;background:${enabled?'#fff':'#f5f5f5'};opacity:${enabled?1:0.6}">`;
+      h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">`;
+      h+=`<b style="font-size:12px"><input type="text" value="${esc(r.rule)}" onchange="rulesConfig['${etype}']['${cat}'][${i}].rule=this.value" style="font-weight:600;border:none;background:transparent;width:200px;font-size:12px"></b>`;
+      h+=`<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer"><input type="checkbox" ${enabled?'checked':''} onchange="rulesConfig['${etype}']['${cat}'][${i}].enabled=this.checked;renderRulesEditorContent('${etype}')"><span>${enabled?'✅ 启用':'⛔ 禁用'}</span></label>`;
+      h+=`</div>`;
+      h+=`<div style="font-size:11px;color:#666;margin:4px 0"><b>描述：</b><input type="text" value="${esc(r.desc||'')}" onchange="rulesConfig['${etype}']['${cat}'][${i}].desc=this.value" style="width:85%;padding:3px 6px;border:1px solid #d9d9d9;border-radius:3px;font-size:11px"></div>`;
+      h+=`<div style="display:flex;gap:8px;font-size:11px">`;
+      h+=`<div style="flex:1;color:#2e7d32"><b>✅ 正例：</b><input type="text" value="${esc(r.positive||'')}" onchange="rulesConfig['${etype}']['${cat}'][${i}].positive=this.value" style="width:85%;padding:3px 6px;border:1px solid #d9d9d9;border-radius:3px;font-size:11px"></div>`;
+      h+=`<div style="flex:1;color:#c62828"><b>❌ 反例：</b><input type="text" value="${esc(r.negative||'')}" onchange="rulesConfig['${etype}']['${cat}'][${i}].negative=this.value" style="width:85%;padding:3px 6px;border:1px solid #d9d9d9;border-radius:3px;font-size:11px"></div>`;
+      h+=`</div></div>`;
+    });
+  }
+  // 常见反例
+  const notEx=cfg.not_examples||[];
+  if(notEx.length){
+    h+=`<div style="margin:10px 0 4px;font-weight:600;color:#5f2d91;font-size:13px">常见反例（${notEx.length}条）</div>`;
+    notEx.forEach((ex,i)=>{
+      h+=`<div style="padding:4px 12px;font-size:11px">• <input type="text" value="${esc(ex)}" onchange="rulesConfig['${etype}'].not_examples[${i}]=this.value" style="width:85%;padding:3px 6px;border:1px solid #d9d9d9;border-radius:3px;font-size:11px"></div>`;
+    });
+  }
+  rc.innerHTML=h;
+}
+
+async function saveRulesConfigUI(){
+  try{
+    const resp=await fetch('/api/rules-config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(rulesConfig)});
+    if(resp.ok){
+      alert('✅ 规则配置已保存！新的识别将使用更新后的规则。');
+      // 重新加载规则文本
+      const rr=await fetch('/api/rules').then(r=>r.json());
+      allRules=rr.rules||{};
+    }else{alert('❗ 保存失败')}
+  }catch(e){alert('❗ 保存失败: '+e.message)}
+}
+
+async function resetRulesConfig(){
+  if(!confirm('确定要重置所有规则配置为默认值吗？'))return;
+  try{
+    const resp=await fetch('/api/rules-config/reset',{method:'POST'});
+    const data=await resp.json();
+    if(data.ok){
+      rulesConfig=data.config||{};
+      const rr=await fetch('/api/rules').then(r=>r.json());
+      allRules=rr.rules||{};
+      if(_ruleEditMode)renderRulesEditor();
+      else{const activeTab=document.querySelector('.rules-tab.on');if(activeTab)activeTab.click()}
+      alert('✅ 已重置为默认规则');
+    }
+  }catch(e){alert('❗ 重置失败: '+e.message)}
+}
+
 init();
 </script>
 </body>
