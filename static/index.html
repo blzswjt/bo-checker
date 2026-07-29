@@ -113,6 +113,19 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .single-in{display:flex;gap:6px}.single-in input{flex:1;padding:8px 12px;border:1px solid #d9d9d9;border-radius:7px;font-size:13px;outline:none}
 .single-in input:focus{border-color:#1a73e8}
 .single-res{margin-top:12px;padding:14px;background:#f9f9f9;border-radius:7px;font-size:13px;line-height:1.8;white-space:pre-wrap}
+/* AI Analysis Panel */
+.ai-panel{margin-top:12px;border:1px solid #d0bfff;border-radius:8px;overflow:hidden;background:#fff}
+.ai-panel-hd{padding:10px 14px;background:linear-gradient(90deg,#f3e8ff,#e8f0fe);cursor:pointer;font-size:13px;font-weight:600;color:#5f2d91;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.ai-panel-hd:hover{filter:brightness(0.97)}
+.ai-panel-bd{padding:12px 14px;border-top:1px solid #e0e0e0;font-size:12px}
+.ai-panel-bd.hidden{display:none}
+.ai-tpl-btns{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.ai-tpl-btn{padding:5px 10px;border:1px solid #d0bfff;border-radius:6px;background:#f8f0ff;color:#5f2d91;font-size:11px;cursor:pointer;transition:all .15s}
+.ai-tpl-btn:hover{background:#e8d5ff;border-color:#9b59b6}
+.ai-prompt-area{width:100%;min-height:80px;border:1px solid #d9d9d9;border-radius:6px;padding:8px 12px;font-size:12px;line-height:1.6;resize:vertical;outline:none;font-family:inherit}
+.ai-prompt-area:focus{border-color:#9b59b6}
+.ai-res{margin-top:10px;padding:12px;background:#faf8ff;border-radius:6px;font-size:12px;line-height:1.8;white-space:pre-wrap;max-height:400px;overflow-y:auto;border:1px solid #e8e0f0}
+.ai-res:empty{display:none}
 /* Rules */
 .rules-tabs{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:12px}
 .rules-tab{padding:4px 12px;border-radius:5px;cursor:pointer;font-size:11px;background:#f5f5f5;color:#666;border:none}
@@ -622,6 +635,29 @@ function rSelect(t){
     });
     h+=`</div>`;
   }
+  // AI 分析面板
+  const aiOpen=t._aiPanelOpen;
+  h+=`<div class="ai-panel"><div class="ai-panel-hd" onclick="tasks[${t.id}]._aiPanelOpen=!tasks[${t.id}]._aiPanelOpen;render(tasks[${t.id}])"><span>🤖 AI 数据分析 <span style="font-weight:400;font-size:11px;color:#888">（先分析表结构，再精准识别）</span></span><span>${aiOpen?'▼':'▶'}</span></div>`;
+  h+=`<div class="ai-panel-bd${aiOpen?'':' hidden'}">`;
+  if(aiOpen){
+    h+=`<div style="margin-bottom:8px;color:#666">🎯 快捷分析模板：</div>`;
+    h+=`<div class="ai-tpl-btns">`;
+    h+=`<button class="ai-tpl-btn" onclick="setAiTpl(${t.id},0)">📊 分析表结构与字段含义</button>`;
+    h+=`<button class="ai-tpl-btn" onclick="setAiTpl(${t.id},1)">🔄 识别状态字段与生命周期</button>`;
+    h+=`<button class="ai-tpl-btn" onclick="setAiTpl(${t.id},2)">🗑️ 剔除技术数据与衍生数据</button>`;
+    h+=`<button class="ai-tpl-btn" onclick="setAiTpl(${t.id},3)">🔍 推断业务对象与逻辑实体</button>`;
+    h+=`<button class="ai-tpl-btn" onclick="setAiTpl(${t.id},4)">📝 综合分析（全部）</button>`;
+    h+=`</div>`;
+    h+=`<textarea class="ai-prompt-area" id="aiPrompt-${t.id}" placeholder="输入分析指令，或点击上方模板按钮...">${esc(t._aiPrompt||'')}</textarea>`;
+    h+=`<div style="margin-top:8px;display:flex;gap:6px;align-items:center">`;
+    h+=`<button class="btn btn-p" onclick="runAnalysis(${t.id})" ${t._aiRunning?'disabled':''}>${t._aiRunning?'⏳ 分析中...':'🚀 开始分析'}</button>`;
+    if(t._aiResult) h+=`<button class="btn btn-o" onclick="applyAnalysis(${t.id})">✅ 应用分析结果</button><button class="btn btn-o" onclick="tasks[${t.id}]._aiResult='';tasks[${t.id}]._aiPrompt='';render(tasks[${t.id}])">🗑 清除</button>`;
+    h+=`</div>`;
+    if(t._aiRunning||t._aiResult){
+      h+=`<div class="ai-res" id="aiRes-${t.id}">${t._aiResult?formatAiRes(t._aiResult):'<span style="color:#999">⏳ 正在分析中...</span>'}</div>`;
+    }
+  }
+  h+=`</div></div>`;
   if(t.pairs.length){
     // 自动推荐batch_size：根据最大unique_count智能计算
     const maxUnique=Math.max(...t.pairs.map(p=>{const sh=t.sheets.find(s=>s.name===p.sheet);const col=sh?.columns.find(c=>c.name===p.column);return col?.unique_count||15}));
@@ -636,6 +672,95 @@ function rSelect(t){
     h+=`<div style="margin-top:10px;color:#999;font-size:12px">请勾选至少一列进行识别</div><div style="margin-top:8px"><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
   }
   return h;
+}
+// ============================================================
+// AI 数据分析函数
+// ============================================================
+const AI_TEMPLATES=[
+`请分析这张数据表的结构和字段含义：
+1. 根据表名（中英文）推断表的业务含义和用途
+2. 逐一分析每个字段的用途、数据类型和取值范围
+3. 识别哪些字段可能是主键、外键、状态字段、时间字段等
+4. 总结表的整体业务语义`,
+`请分析该表中是否存在状态字段，并推断生命周期：
+1. 找出所有可能是“状态”类型的字段（如status、state、flag、type等）
+2. 分析这些字段的可能取值和含义
+3. 根据状态字段推断业务对象的生命周期阶段
+4. 判断状态变化是否意味着应识别为不同的业务对象`,
+`请帮我识别并剔除技术数据和衍生数据：
+1. 技术数据：作业配置表、元数据表、技术参数配置表、映射转换表、接口表、同步表等
+2. 衍生数据：历史表、中间表、临时表、备份表、宽表、汇总表等
+3. 对每个字段判断是否属于技术字段（如租户ID、删除标记、创建人、修改时间、版本号等）
+4. 给出明确的剔除建议和理由`,
+`请根据表结构推断哪些可以作为业务对象，哪些适合作为逻辑实体：
+1. 分析表中哪些字段代表独立的业务单据（可能是业务对象）
+2. 哪些字段是描述性属性（可能是业务属性）
+3. 哪些字段组合可以构成逻辑实体
+4. 给出每个推断的依据`,
+`请对这张数据表进行全面综合分析：
+1. 【表结构分析】表名含义、字段分类（业务字段 vs 技术字段）
+2. 【状态与生命周期】识别状态字段，推断生命周期阶段
+3. 【数据分类】区分业务数据、技术数据、衍生数据
+4. 【建模建议】哪些字段适合作为业务对象/逻辑实体/业务属性
+5. 【数据质量】是否存在命名不规范、含义模糊、重复字段等问题
+6. 给出最终的数据治理建议`
+];
+function setAiTpl(id,idx){
+  const t=tasks[id];
+  t._aiPrompt=AI_TEMPLATES[idx];
+  const el=document.getElementById('aiPrompt-'+id);
+  if(el)el.value=AI_TEMPLATES[idx];
+}
+async function runAnalysis(id){
+  const t=tasks[id];
+  const el=document.getElementById('aiPrompt-'+id);
+  const prompt=el?el.value.trim():t._aiPrompt||'';
+  if(!prompt){alert('请输入分析指令');return}
+  t._aiPrompt=prompt;t._aiRunning=true;t._aiResult='';
+  render(t);
+  const resEl=document.getElementById('aiRes-'+id);
+  if(resEl)resEl.innerHTML='<span style="color:#999">⏳ 正在连接 AI 模型...</span>';
+  try{
+    const resp=await fetch('/api/analyze-data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file_path:t.fp,sheet:t.selSheet,prompt:prompt,model_id:getModelId()})});
+    if(!resp.ok){const e=await resp.json();alert('❗ '+e.error);t._aiRunning=false;render(t);return}
+    const reader=resp.body.getReader();const dec=new TextDecoder();let buf='',text='';
+    while(true){
+      const {done,value}=await reader.read();
+      if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split('\n');buf=lines.pop()||'';
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        try{
+          const d=JSON.parse(line.slice(6));
+          if(d.content){text+=d.content;const re=document.getElementById('aiRes-'+id);if(re)re.innerHTML=formatAiRes(text)}
+          if(d.done){t._aiRunning=false;t._aiResult=text;render(t)}
+        }catch(e){}
+      }
+    }
+    if(t._aiRunning){t._aiRunning=false;t._aiResult=text;render(t)}
+  }catch(e){t._aiRunning=false;t._aiResult='❗ 分析失败: '+e.message;render(t)}
+}
+function formatAiRes(text){
+  // 简单 Markdown 风格渲染
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+    .replace(/^### (.+)$/gm,'<div style="font-weight:600;color:#5f2d91;margin:10px 0 4px;font-size:13px">$1</div>')
+    .replace(/^## (.+)$/gm,'<div style="font-weight:700;color:#5f2d91;margin:14px 0 6px;font-size:14px;border-bottom:1px solid #e8e0f0;padding-bottom:4px">$1</div>')
+    .replace(/^# (.+)$/gm,'<div style="font-weight:700;color:#5f2d91;font-size:16px;margin:16px 0 8px">$1</div>')
+    .replace(/^- (.+)$/gm,'<div style="padding-left:12px;margin:2px 0">• $1</div>')
+    .replace(/^(\d+)\. (.+)$/gm,'<div style="padding-left:12px;margin:2px 0"><b>$1.</b> $2</div>');
+}
+function applyAnalysis(id){
+  const t=tasks[id];
+  if(!t._aiResult){alert('尚无分析结果');return}
+  t._analysisContext=t._aiResult;
+  // 显示已应用状态
+  const re=document.getElementById('aiRes-'+id);
+  if(re){
+    re.insertAdjacentHTML('afterbegin','<div style="background:#e8f5e9;color:#2e7d32;padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600">✅ 分析结果已应用，将在后续识别中作为上下文参考</div>');
+  }
 }
 function rRunning(t){
   let h='';
@@ -867,7 +992,7 @@ async function startAll(id){
     } // end if !p._fromImage
     if(!p.items.length){p.status='done';p.summary={total:0,is_bo:0,not_bo:0,unknown:0};p.thinkingDone=true;return}
     try{
-      const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:bs,model_id:getModelId(),context_map:p._contextMap})});
+      const res=await fetch('/api/check-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:p.items,element_type:p.elementType,batch_size:bs,model_id:getModelId(),context_map:p._contextMap,analysis_context:t._analysisContext||null})});
       const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
       while(true){
         const{done,value}=await reader.read();if(done)break;

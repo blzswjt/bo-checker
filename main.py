@@ -214,6 +214,7 @@ class CheckRequest(BaseModel):
     batch_size: int = 5
     model_id: Optional[str] = None
     context_map: Optional[dict] = None  # {item_name: {l1, l2, l3, definition}} 业务上下文
+    analysis_context: Optional[str] = None  # AI 预分析结果，作为识别参考
 
 
 @app.post("/api/check-items")
@@ -223,7 +224,7 @@ async def check_items(req: CheckRequest):
         return JSONResponse({"error": f"不支持的元素类型: {req.element_type}"}, status_code=400)
 
     def event_stream():
-        for event in check_items_stream(req.items, req.element_type, req.batch_size, model_id=req.model_id, context_map=req.context_map):
+        for event in check_items_stream(req.items, req.element_type, req.batch_size, model_id=req.model_id, context_map=req.context_map, analysis_context=req.analysis_context):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -269,6 +270,102 @@ async def get_excel_context(file_path: str, sheet: str, column: str):
         return JSONResponse({"error": "文件不存在"}, status_code=404)
     context = extract_item_context(str(full_path), sheet, column)
     return {"context": context, "count": len(context)}
+
+
+# ============================================================
+# AI 数据分析（预分析对话）
+# ============================================================
+
+class AnalyzeRequest(BaseModel):
+    file_path: str
+    sheet: str
+    prompt: str
+    model_id: Optional[str] = None
+
+
+@app.post("/api/analyze-data")
+async def analyze_data(req: AnalyzeRequest):
+    """SSE流式分析Excel数据，基于用户自定义指令"""
+    full_path = UPLOAD_DIR / req.file_path
+    if not full_path.exists():
+        return JSONResponse({"error": "文件不存在"}, status_code=404)
+
+    # 获取子表的完整结构信息
+    parsed = parse_excel_file(str(full_path))
+    if "error" in parsed:
+        return JSONResponse({"error": parsed["error"]}, status_code=400)
+
+    # 找到目标子表
+    sheet_info = None
+    for s in parsed.get("sheets", []):
+        if s["name"] == req.sheet:
+            sheet_info = s
+            break
+    if not sheet_info:
+        return JSONResponse({"error": f"子表 '{req.sheet}' 不存在"}, status_code=404)
+
+    # 获取子表所有列的样本数据摘要
+    from checker import extract_column_values as _ecv
+    columns_summary = []
+    for col in sheet_info.get("columns", []):
+        col_name = col["name"]
+        # 获取前20个样本值
+        try:
+            vals = _ecv(str(full_path), req.sheet, col_name)
+            sample = vals[:20]
+            total = len(vals)
+        except Exception:
+            sample = col.get("sample", [])
+            total = col.get("unique_count", 0)
+        columns_summary.append({
+            "name": col_name,
+            "rows": col.get("rows", 0),
+            "unique_count": total,
+            "samples": sample,
+        })
+
+    # 构建分析上下文
+    data_context = f"""## 数据表信息
+- 子表名称：{req.sheet}
+- 总行数：{sheet_info.get('rows', '?')}
+- 总列数：{len(columns_summary)}
+
+### 所有字段详情：
+"""
+    for i, c in enumerate(columns_summary, 1):
+        data_context += f"{i}. **{c['name']}**（{c['rows']}行, {c['unique_count']}个唯一值）\n"
+        if c['samples']:
+            sample_text = ", ".join(str(s) for s in c['samples'][:15])
+            if len(c['samples']) > 15:
+                sample_text += f"...（共{len(c['samples'])}个）"
+            data_context += f"   样本值: {sample_text}\n"
+
+    system_prompt = """你是一位资深数据治理和数据架构专家，擅长企业数据建模、数据资产管理。请根据提供的数据表结构信息，按照用户的指令进行专业分析。
+
+分析要求：
+1. 结合字段名（中英文）推断业务含义
+2. 通过样本值分析数据特征和用途范围
+3. 给出结构化的、可操作的分析结论
+4. 如果涉及数据质量，给出具体的判断依据"""
+
+    user_prompt = f"""{data_context}
+
+---
+
+## 用户分析指令
+{req.prompt}"""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+
+    def event_stream():
+        for chunk in chat_stream(messages, temperature=0.3, model_id=req.model_id):
+            yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 # ============================================================

@@ -197,7 +197,8 @@ def build_check_prompt(element_type: str) -> str:
 
 
 def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = None, context_map: dict = None,
-                       include_naming: bool = False, include_definition: bool = False) -> str:
+                       include_naming: bool = False, include_definition: bool = False,
+                       analysis_context: str = None) -> str:
     """构建批量识别 Prompt，集成知识库示例、业务上下文和逐条规则分析
     
     include_naming: 是否包含命名规则（默认不包含，仅用识别规则）
@@ -280,6 +281,15 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
         if context_lines:
             context_section = "\n\n## 业务上下文（来自Excel文件，请参考）\n" + "\n".join(context_lines)
 
+    # AI 预分析上下文
+    analysis_section = ""
+    if analysis_context:
+        # 截取前2000字符，避免 prompt 过长
+        trimmed = analysis_context[:2000]
+        if len(analysis_context) > 2000:
+            trimmed += "\n...(分析内容已截断)"
+        analysis_section = f"\n\n## 数据表预分析结果（来自 AI 分析，请参考）\n{trimmed}"
+
     # 条件性构建命名规则/定义规则区块
     naming_section = f"\n## 命名规则{nm_detail}" if nm_detail else ""
     definition_section = f"\n## 定义规则{df_detail}" if df_detail else ""
@@ -298,7 +308,7 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
 ## {element_type}定义
 {rules['description']}
 
-## 识别规则（需全部满足）{id_detail}{naming_section}{definition_section}{not_summary}{kb_section}{context_section}
+## 识别规则（需全部满足）{id_detail}{naming_section}{definition_section}{not_summary}{kb_section}{context_section}{analysis_section}
 
 ## 输出要求
 

@@ -366,7 +366,7 @@ def _detect_streaming_rule_checks(text: str, batch: list[str], last_pos: int, em
 # 3. 流式识别主生成器
 # ============================================================
 
-def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5, model_id: str = None, context_map: dict = None):
+def check_items_stream(items: list[str], element_type: str = "业务对象", batch_size: int = 5, model_id: str = None, context_map: dict = None, analysis_context: str = None):
     """
     生成器：逐批调用LLM判断，yield SSE事件。
     集成知识库示例，结果包含逐条规则分析(rules_check)。
@@ -385,7 +385,7 @@ def check_items_stream(items: list[str], element_type: str = "业务对象", bat
         kb_examples = kb.get_examples(element_type, items=batch)
         numbered = "\n".join(f"{j+1}. {item}" for j, item in enumerate(batch))
 
-        prompt = build_batch_prompt(element_type, numbered, kb_examples=kb_examples, context_map=context_map)
+        prompt = build_batch_prompt(element_type, numbered, kb_examples=kb_examples, context_map=context_map, analysis_context=analysis_context)
         if not prompt:
             for j, item in enumerate(batch):
                 result = {"item": item, "is_bo": None, "confidence": "low", "reason": f"未知元素类型: {element_type}", "rules_check": []}
