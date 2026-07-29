@@ -353,18 +353,19 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
         <!-- 批量识别 -->
         <div class="help-sec" id="hp-batch">
           <h4>📊 批量识别</h4>
-          <div class="help-feat"><div class="hf-icon">🖼️</div><div class="hf-body"><div class="hf-title">图片识别提取<span class="hf-tag hf-tag-new">新功能</span></div><div class="hf-desc">切换到「图片识别提取」标签，上传包含数据模型/流程图/表格截图等图片，AI 自动提取其中的术语。确认提取结果后，一键开始批量识别是否为目标元素类型。支持拖拽上传 jpg/png/webp。</div></div></div>
+          <div class="help-feat"><div class="hf-icon">🖼️</div><div class="hf-body"><div class="hf-title">图片识别提取<span class="hf-tag hf-tag-new">新功能</span></div><div class="hf-desc">切换到「图片识别提取」标签，上传包含数据模型/流程图/表格截图等图片，AI 自动提取其中的术语。支持拖拽上传、<b>Ctrl+V 粘贴截图</b>（截图后直接粘贴）。确认提取结果后，一键开始批量识别。</div></div></div>
           <div class="help-feat"><div class="hf-icon">📁</div><div class="hf-body"><div class="hf-title">上传 Excel 文件<span class="hf-tag hf-tag-tip">支持拖拽</span></div><div class="hf-desc">点击上传区域或直接将 .xlsx 文件拖入，系统自动解析所有子表和列信息。支持 .xlsx 和 .xls 格式。</div></div></div>
           <div class="help-feat"><div class="hf-icon">☑️</div><div class="hf-body"><div class="hf-title">列选择与全选</div><div class="hf-desc">上传后展示所有子表和列，勾选需要识别的列。提供「✅ 全选」选中当前子表所有列、「☐ 取消当前」取消当前子表、「🗑 全部子表取消」一键清空所有子表已选列。</div></div></div>
           <div class="help-feat"><div class="hf-icon">👁</div><div class="hf-body"><div class="hf-title">列数据预览</div><div class="hf-desc">每列右侧有「👁 预览」按钮，点击弹窗展示该列前 50 条非空唯一值，帮助判断列内容。</div></div></div>
           <div class="help-feat"><div class="hf-icon">🏷️</div><div class="hf-body"><div class="hf-title">元素类型选择</div><div class="hf-desc">每个列配对需指定元素类型（业务对象/逻辑实体等），系统会根据列名 AI 推荐类型（橙色标签），可手动切换。</div></div></div>
-          <div class="help-feat"><div class="hf-icon">🔢</div><div class="hf-body"><div class="hf-title">批次大小自定义</div><div class="hf-desc">默认根据列数据量推荐批次大小（1~20），可通过内联数字输入框自行调整。修改后保留自定义值，点「恢复推荐」重置。</div></div></div>
+          <div class="help-feat"><div class="hf-icon">🔢</div><div class="hf-body"><div class="hf-title">批次大小自定义</div><div class="hf-desc">默认根据列数据量推荐批次大小（1~50），可通过内联数字输入框自行调整。修改后保留自定义值，点「恢复推荐」重置。2000+ 数据建议设为 20~30。</div></div></div>
           <div class="help-feat"><div class="hf-icon">▶️</div><div class="hf-body"><div class="hf-title">开始识别与实时查看</div><div class="hf-desc">点击「🚀 开始识别」后，AI 流式输出分析过程。可实时看到思考文本、逐条结果和进度条。支持列表视图和矩阵视图切换。</div></div></div>
           <div class="help-feat"><div class="hf-icon">📊</div><div class="hf-body"><div class="hf-title">结果统计饼图</div><div class="hf-desc">识别完成后自动显示三色饼图（✅是 / ❌不是 / ⚠️待人工），直观展示识别结果分布。</div></div></div>
           <div class="help-feat"><div class="hf-icon">📋</div><div class="hf-body"><div class="hf-title">复制与导出</div><div class="hf-desc">每个识别结果区域有「📋 复制」按钮，一键复制格式化文本到剪贴板。底部支持「📥 导出 CSV」下载完整结果。</div></div></div>
           <div class="help-feat"><div class="hf-icon">🔄</div><div class="hf-body"><div class="hf-title">重跑失败项<span class="hf-tag hf-tag-new">新功能</span></div><div class="hf-desc">识别完成后如有待定/失败项，显示「🔄 重跑失败/待定项」按钮，仅对失败项重新调用 AI，节省时间。</div></div></div>
           <div class="help-feat"><div class="hf-icon">💬</div><div class="hf-body"><div class="hf-title">AI 追问对话</div><div class="hf-desc">点击结果中的任意判定结论，弹出追问对话框，可向 AI 追问细节。对话中可纠正结果并同步到知识库。</div></div></div>
-          <div class="help-feat"><div class="hf-icon">🔍</div><div class="hf-body"><div class="hf-title">矩阵视图</div><div class="hf-desc">切换到矩阵视图后，以交叉表格展示所有事物在各规则下的通过/失败状态，点击单元格查看详情。支持列宽拖拽调整。</div></div></div>
+          <div class="help-feat"><div class="hf-icon">🔍</div><div class="hf-body"><div class="hf-title">矩阵视图</div><div class="hf-desc">切换到矩阵视图后，以交叉表格展示所有事物在各识别规则下的通过/失败状态，点击单元格查看详情。支持列宽拖拽调整。</div></div></div>
+          <div class="help-feat"><div class="hf-icon">🤖</div><div class="hf-body"><div class="hf-title">AI 数据分析<span class="hf-tag hf-tag-new">新功能</span></div><div class="hf-desc">上传 Excel 后展开「🤖 AI 数据分析」面板，可对表结构进行预分析。内置 5 个快捷模板：分析表结构与字段含义、识别状态字段与生命周期、剔除技术数据与衍生数据、推断业务对象与逻辑实体、综合分析。也支持自定义指令。分析结果可应用到后续识别，提升准确度。</div></div></div>
         </div>
 
         <!-- 单个分析 -->
@@ -406,6 +407,7 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
           <div class="help-feat"><div class="hf-icon">❓</div><div class="hf-body"><div class="hf-title">Q: 刷新页面任务会丢失吗？</div><div class="hf-desc">不会。任务数据自动保存到浏览器本地存储，刷新后自动恢复。但运行中的任务会中断，关闭前会弹出提醒。</div></div></div>
           <div class="help-feat"><div class="hf-icon">❓</div><div class="hf-body"><div class="hf-title">Q: 如何同时识别多列？</div><div class="hf-desc">上传文件后，在不同子表中勾选需要的列，每列可指定不同的元素类型，点击「🚀 开始识别」后所有已选列并发执行。</div></div></div>
           <div class="help-feat"><div class="hf-icon">❓</div><div class="hf-body"><div class="hf-title">Q: 子表太多怎么快速取消？</div><div class="hf-desc">使用列选择区域顶部的「🗑 全部子表取消」按钮，一键清空所有子表的已选列，无需逐个切换。</div></div></div>
+          <div class="help-feat"><div class="hf-icon">❓</div><div class="hf-body"><div class="hf-title">Q: 如何让识别更准确？</div><div class="hf-desc">1) 上传 Excel 后先用「🤖 AI 数据分析」面板做预分析（如剔除技术字段、分析状态字段），点击「应用分析结果」后再开始识别；2) 在知识库中添加正例/反例；3) 通过追问对话框纠正结果并同步知识库。</div></div></div>
         </div>
       </div>
     </div>
