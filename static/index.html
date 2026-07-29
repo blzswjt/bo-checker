@@ -1956,14 +1956,13 @@ function renderRulesEditorContent(etype){
   for(const cat of ['identification','naming','definition']){
     const catName={identification:'识别规则',naming:'命名规则',definition:'定义规则'}[cat];
     const rules=cfg[cat]||[];
-    if(!rules.length)continue;
-    h+=`<div style="margin:10px 0 4px;font-weight:600;color:#5f2d91;font-size:13px">${catName}（${rules.length}条）</div>`;
+    h+=`<div style="margin:12px 0 4px;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;color:#5f2d91;font-size:13px">${catName}（${rules.length}条）</span><button class="btn btn-o btn-s" style="font-size:10px;padding:2px 8px" onclick="addRule('${etype}','${cat}')">➕ 新增规则</button></div>`;
     rules.forEach((r,i)=>{
       const enabled=r.enabled!==false;
       h+=`<div style="padding:8px 12px;margin:4px 0;border:1px solid ${enabled?'#d0bfff':'#e0e0e0'};border-radius:6px;background:${enabled?'#fff':'#f5f5f5'};opacity:${enabled?1:0.6}">`;
       h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">`;
       h+=`<b style="font-size:12px"><input type="text" value="${esc(r.rule)}" onchange="rulesConfig['${etype}']['${cat}'][${i}].rule=this.value" style="font-weight:600;border:none;background:transparent;width:200px;font-size:12px"></b>`;
-      h+=`<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer"><input type="checkbox" ${enabled?'checked':''} onchange="rulesConfig['${etype}']['${cat}'][${i}].enabled=this.checked;renderRulesEditorContent('${etype}')"><span>${enabled?'✅ 启用':'⛔ 禁用'}</span></label>`;
+      h+=`<div style="display:flex;align-items:center;gap:6px"><label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer"><input type="checkbox" ${enabled?'checked':''} onchange="rulesConfig['${etype}']['${cat}'][${i}].enabled=this.checked;renderRulesEditorContent('${etype}')"><span>${enabled?'✅':'⛔'}</span></label><button class="btn btn-o btn-s" style="font-size:10px;padding:1px 6px;color:#c62828;border-color:#ffcdd2" onclick="deleteRule('${etype}','${cat}',${i})" title="删除此规则">🗑️</button></div>`;
       h+=`</div>`;
       h+=`<div style="font-size:11px;color:#666;margin:4px 0"><b>描述：</b><input type="text" value="${esc(r.desc||'')}" onchange="rulesConfig['${etype}']['${cat}'][${i}].desc=this.value" style="width:85%;padding:3px 6px;border:1px solid #d9d9d9;border-radius:3px;font-size:11px"></div>`;
       h+=`<div style="display:flex;gap:8px;font-size:11px">`;
@@ -1974,13 +1973,39 @@ function renderRulesEditorContent(etype){
   }
   // 常见反例
   const notEx=cfg.not_examples||[];
-  if(notEx.length){
-    h+=`<div style="margin:10px 0 4px;font-weight:600;color:#5f2d91;font-size:13px">常见反例（${notEx.length}条）</div>`;
-    notEx.forEach((ex,i)=>{
-      h+=`<div style="padding:4px 12px;font-size:11px">• <input type="text" value="${esc(ex)}" onchange="rulesConfig['${etype}'].not_examples[${i}]=this.value" style="width:85%;padding:3px 6px;border:1px solid #d9d9d9;border-radius:3px;font-size:11px"></div>`;
-    });
-  }
+  h+=`<div style="margin:12px 0 4px;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;color:#5f2d91;font-size:13px">常见反例（${notEx.length}条）</span><button class="btn btn-o btn-s" style="font-size:10px;padding:2px 8px" onclick="addNotExample('${etype}')">➕ 新增反例</button></div>`;
+  notEx.forEach((ex,i)=>{
+    h+=`<div style="padding:4px 12px;font-size:11px;display:flex;align-items:center;gap:6px">• <input type="text" value="${esc(ex)}" onchange="rulesConfig['${etype}'].not_examples[${i}]=this.value" style="flex:1;padding:3px 6px;border:1px solid #d9d9d9;border-radius:3px;font-size:11px"><button style="border:none;background:none;cursor:pointer;color:#c62828;font-size:12px" onclick="deleteNotExample('${etype}',${i})" title="删除">🗑️</button></div>`;
+  });
   rc.innerHTML=h;
+}
+
+function addRule(etype,cat){
+  if(!rulesConfig[etype][cat])rulesConfig[etype][cat]=[];
+  const n=rulesConfig[etype][cat].length+1;
+  rulesConfig[etype][cat].push({rule:`新规则${n}`,desc:'请填写规则描述',positive:'',negative:'',enabled:true});
+  renderRulesEditorContent(etype);
+  // 滚动到新增的规则
+  const rc=document.getElementById('rCt');
+  if(rc)rc.scrollTop=rc.scrollHeight;
+}
+
+function deleteRule(etype,cat,idx){
+  const r=rulesConfig[etype][cat][idx];
+  if(!confirm(`确定删除规则「${r.rule}」吗？`))return;
+  rulesConfig[etype][cat].splice(idx,1);
+  renderRulesEditorContent(etype);
+}
+
+function addNotExample(etype){
+  if(!rulesConfig[etype].not_examples)rulesConfig[etype].not_examples=[];
+  rulesConfig[etype].not_examples.push('新的反例描述');
+  renderRulesEditorContent(etype);
+}
+
+function deleteNotExample(etype,idx){
+  rulesConfig[etype].not_examples.splice(idx,1);
+  renderRulesEditorContent(etype);
 }
 
 async function saveRulesConfigUI(){
