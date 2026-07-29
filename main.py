@@ -107,14 +107,11 @@ async def get_element_types():
     """返回元素类型列表及每种类型的识别规则名"""
     rule_names = {}
     for etype, rules in ELEMENT_RULES.items():
-        all_rule_names = []
-        for r in rules.get("identification", []):
-            all_rule_names.append(r["rule"])
-        for r in rules.get("naming", []):
-            all_rule_names.append(r["rule"])
-        for r in rules.get("definition", []):
-            all_rule_names.append(r["rule"])
-        rule_names[etype] = all_rule_names
+        rule_names[etype] = {
+            "identification": [r["rule"] for r in rules.get("identification", [])],
+            "naming": [r["rule"] for r in rules.get("naming", [])],
+            "definition": [r["rule"] for r in rules.get("definition", [])],
+        }
     return {"types": ELEMENT_TYPES, "rule_names": rule_names}
 
 
