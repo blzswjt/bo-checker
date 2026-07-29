@@ -630,7 +630,7 @@ function rSelect(t){
     const curBS=t._batchSize;
     h+=`<div style="margin-top:10px;padding:10px;background:#f0f7ff;border-radius:6px;font-size:12px">已选 <b>${t.pairs.length}</b> 列：`;
     t.pairs.forEach(p=>{h+=`<span class="tag" style="margin:2px">${esc(p.column)} → ${esc(p.elementType)}</span> `});
-    h+=`<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="color:#666">📦 每批识别条数：</span><input type="number" min="1" max="20" value="${curBS}" style="width:56px;padding:3px 6px;border:1px solid #d9d9d9;border-radius:5px;font-size:12px;text-align:center" onchange="setBS(${t.id},this.value)" oninput="setBS(${t.id},this.value)"><span style="color:#999;font-size:11px">条/批（推荐 ${recBS}，范围 1~20）<button class="btn btn-o" style="padding:1px 8px;font-size:10px;margin-left:4px" onclick="resetBS(${t.id},${recBS})">恢复推荐</button></span></div>`;
+    h+=`<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="color:#666">📦 每批识别条数：</span><input type="number" min="1" max="50" value="${curBS}" style="width:56px;padding:3px 6px;border:1px solid #d9d9d9;border-radius:5px;font-size:12px;text-align:center" onchange="setBS(${t.id},this.value)" oninput="setBS(${t.id},this.value)"><span style="color:#999;font-size:11px">条/批（推荐 ${recBS}，范围 1~50）<button class="btn btn-o" style="padding:1px 8px;font-size:10px;margin-left:4px" onclick="resetBS(${t.id},${recBS})">恢复推荐</button></span></div>`;
     h+=`</div><div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-p" onclick="startAll(${t.id})">🚀 开始识别</button><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
   }else{
     h+=`<div style="margin-top:10px;color:#999;font-size:12px">请勾选至少一列进行识别</div><div style="margin-top:8px"><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
@@ -691,7 +691,7 @@ function rRunning(t){
 // Task Actions: 上传、列选择、启动识别
 // ============================================================
 function tSetType(id,t){tasks[id].et=t;render(tasks[id])}
-function setBS(id,val){const t=tasks[id];const n=parseInt(val);if(!isNaN(n)&&n>=1&&n<=20)t._batchSize=n;}
+function setBS(id,val){const t=tasks[id];const n=parseInt(val);if(!isNaN(n)&&n>=1&&n<=50)t._batchSize=n;}
 function resetBS(id,rec){const t=tasks[id];t._batchSize=rec;render(t);}
 function tReset(id){const t=tasks[id];t.st='config';t.pairs=[];t.sheets=[];t.error=null;render(t);renderSidebar()}
 function selSheet(id,name){tasks[id].selSheet=name;render(tasks[id])}

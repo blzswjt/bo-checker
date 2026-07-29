@@ -196,16 +196,21 @@ def build_check_prompt(element_type: str) -> str:
     return "\n".join(parts)
 
 
-def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = None, context_map: dict = None) -> str:
-    """构建批量识别 Prompt，集成知识库示例、业务上下文和逐条规则分析"""
+def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = None, context_map: dict = None,
+                       include_naming: bool = False, include_definition: bool = False) -> str:
+    """构建批量识别 Prompt，集成知识库示例、业务上下文和逐条规则分析
+    
+    include_naming: 是否包含命名规则（默认不包含，仅用识别规则）
+    include_definition: 是否包含定义规则（默认不包含）
+    """
     rules = ELEMENT_RULES.get(element_type)
     if not rules:
         return ""
 
-    # 规则详情 - 包含所有规则类型
+    # 规则详情 - 识别规则始终包含
     id_rules = rules["identification"]
-    nm_rules = rules.get("naming", [])
-    df_rules = rules.get("definition", [])
+    nm_rules = rules.get("naming", []) if include_naming else []
+    df_rules = rules.get("definition", []) if include_definition else []
     
     id_detail = ""
     for i, r in enumerate(id_rules, 1):
@@ -249,7 +254,7 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
             if neg:
                 kb_section += "\n已确认不是的：" + "、".join(f"{e['item']}（{e.get('reason','')}）" for e in neg[:6])
 
-    # 构建所有规则名称列表供逐条分析
+    # 构建所有规则名称列表供逐条分析（只包含启用的规则）
     all_rule_names = [r["rule"] for r in id_rules] + [r["rule"] for r in nm_rules] + [r["rule"] for r in df_rules]
     rule_names_json = json.dumps(all_rule_names, ensure_ascii=False)
 
@@ -275,22 +280,31 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
         if context_lines:
             context_section = "\n\n## 业务上下文（来自Excel文件，请参考）\n" + "\n".join(context_lines)
 
+    # 条件性构建命名规则/定义规则区块
+    naming_section = f"\n## 命名规则{nm_detail}" if nm_detail else ""
+    definition_section = f"\n## 定义规则{df_detail}" if df_detail else ""
+    
+    # 规则分析范围描述
+    rule_scope = "识别规则"
+    if nm_detail and df_detail:
+        rule_scope = "识别规则、命名规则、定义规则"
+    elif nm_detail:
+        rule_scope = "识别规则、命名规则"
+    elif df_detail:
+        rule_scope = "识别规则、定义规则"
+
     return f"""你是一个数据治理专家。请判断以下事物是否是「{element_type}」。
 
 ## {element_type}定义
 {rules['description']}
 
-## 识别规则（需全部满足）{id_detail}
-
-## 命名规则{nm_detail}
-
-## 定义规则{df_detail}{not_summary}{kb_section}{context_section}
+## 识别规则（需全部满足）{id_detail}{naming_section}{definition_section}{not_summary}{kb_section}{context_section}
 
 ## 输出要求
 
 **第一步：先用自然语言对每个事物进行分析思考**
 
-对每个事物逐条规则分析（包括识别规则、命名规则、定义规则），格式如：
+对每个事物逐条{rule_scope}分析，格式如：
 **1. 事物名**
 - 分析：简要分析这个事物是什么，与{element_type}的关系
 - 规则判断：
@@ -312,7 +326,7 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
 
 说明：
 - is_bo: true=是{element_type}, false=不是, null=无法确定需人工判断
-- rules_check: 对所有规则（识别+命名+定义）逐一判断，rule名必须与上面的规则名完全一致
+- rules_check: 对所有规则逐一判断，rule名必须与上面的规则名完全一致
 
 规则名列表：{rule_names_json}
 
