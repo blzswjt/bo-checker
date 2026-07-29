@@ -19,6 +19,9 @@ uploads/
 # 知识库数据
 knowledge.json
 
+# 规则配置（用户自定义）
+rules_config.json
+
 # 数据库
 *.db
 *.sqlite3

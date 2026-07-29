@@ -108,9 +108,9 @@ async def get_element_types():
     rule_names = {}
     for etype, rules in ELEMENT_RULES.items():
         rule_names[etype] = {
-            "identification": [r["rule"] for r in rules.get("identification", [])],
-            "naming": [r["rule"] for r in rules.get("naming", [])],
-            "definition": [r["rule"] for r in rules.get("definition", [])],
+            "identification": [r["rule"] for r in rules.get("identification", []) if r.get("enabled", True) is not False],
+            "naming": [r["rule"] for r in rules.get("naming", []) if r.get("enabled", True) is not False],
+            "definition": [r["rule"] for r in rules.get("definition", []) if r.get("enabled", True) is not False],
         }
     return {"types": ELEMENT_TYPES, "rule_names": rule_names}
 
