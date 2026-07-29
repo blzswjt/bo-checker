@@ -1988,9 +1988,15 @@ async function saveRulesConfigUI(){
     const resp=await fetch('/api/rules-config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(rulesConfig)});
     if(resp.ok){
       alert('✅ 规则配置已保存！新的识别将使用更新后的规则。');
-      // 重新加载规则文本
-      const rr=await fetch('/api/rules').then(r=>r.json());
+      // 重新加载规则文本和规则名（矩阵列头）
+      const[rr,tr]=await Promise.all([fetch('/api/rules').then(r=>r.json()),fetch('/api/element-types').then(r=>r.json())]);
       allRules=rr.rules||{};
+      RN=tr.rule_names||{};
+      // 刷新规则页普通视图
+      if(!_ruleEditMode){
+        const rt=document.getElementById('rTabs');rt.innerHTML='';let first=true;
+        for(const[t,txt]of Object.entries(allRules)){const b=document.createElement('button');b.className='rules-tab'+(first?' on':'');b.textContent=t;b.onclick=()=>{rt.querySelectorAll('.rules-tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('rCt').textContent=txt};rt.appendChild(b);if(first){document.getElementById('rCt').textContent=txt;first=false}}
+      }
     }else{alert('❗ 保存失败')}
   }catch(e){alert('❗ 保存失败: '+e.message)}
 }
