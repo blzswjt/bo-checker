@@ -281,12 +281,12 @@ def build_check_prompt(element_type: str) -> str:
 
 
 def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = None, context_map: dict = None,
-                       include_naming: bool = False, include_definition: bool = False,
+                       include_naming: bool = True, include_definition: bool = True,
                        analysis_context: str = None) -> str:
     """构建批量识别 Prompt，集成知识库示例、业务上下文和逐条规则分析
     
-    include_naming: 是否包含命名规则（默认不包含，仅用识别规则）
-    include_definition: 是否包含定义规则（默认不包含）
+    include_naming: 是否包含命名规则（默认包含）
+    include_definition: 是否包含定义规则（默认包含）
     """
     rules = ELEMENT_RULES.get(element_type)
     if not rules:

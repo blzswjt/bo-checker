@@ -1539,13 +1539,13 @@ function ELEMENT_RULES_DATA(elementType){
   const cat=RN[elementType]||{};
   return [...(cat.identification||[]),...(cat.naming||[]),...(cat.definition||[])];
 }
-// 获取用于矩阵视图的规则名（默认仅识别规则）
+// 获取用于矩阵视图的规则名（所有启用的规则：识别+命名+定义）
 function getIdRules(elementType){
   const cat=RN[elementType];
   if(!cat)return [];
   // 兼容旧版平铺数组格式
   if(Array.isArray(cat))return cat;
-  return cat.identification||[];
+  return [...(cat.identification||[]),...(cat.naming||[]),...(cat.definition||[])];
 }
 
 function findRuleCheck(rulesCheck,ruleName){
