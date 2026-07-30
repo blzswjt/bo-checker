@@ -283,12 +283,14 @@ async def get_column_values(file_path: str, sheet: str, column: str):
 
 
 @app.get("/api/excel-context")
-async def get_excel_context(file_path: str, sheet: str, column: str):
-    """获取指定列中每个条目的业务上下文（L1/L2/L3/定义），用于增强AI识别"""
+async def get_excel_context(file_path: str, sheet: str, column: str, context_columns: str = None):
+    """获取指定列中每个条目的业务上下文，用于增强AI识别。
+    context_columns: 逗号分隔的上下文列名（可选，不传则自动检测L1/L2/L3）"""
     full_path = UPLOAD_DIR / file_path
     if not full_path.exists():
         return JSONResponse({"error": "文件不存在"}, status_code=404)
-    context = extract_item_context(str(full_path), sheet, column)
+    cols = [c.strip() for c in context_columns.split(',') if c.strip()] if context_columns else None
+    context = extract_item_context(str(full_path), sheet, column, context_columns=cols)
     return {"context": context, "count": len(context)}
 
 

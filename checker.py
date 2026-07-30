@@ -192,30 +192,16 @@ def extract_column_values(file_path: str, sheet_name: str, column_name: str) -> 
     return list(dict.fromkeys(values))  # 去重保序
 
 
-def extract_item_context(file_path: str, sheet_name: str, column_name: str) -> dict[str, dict]:
+def extract_item_context(file_path: str, sheet_name: str, column_name: str,
+                         context_columns: list[str] = None) -> dict[str, dict]:
     """
-    从Excel中提取每个条目的业务上下文（L1/L2/L3/定义）。
-    返回 {item_name: {l1, l2, l3, definition}} 映射，用于增强AI识别准确率。
+    从Excel中提取每个条目的业务上下文。
+    context_columns: 用户手动指定的上下文列名列表（按顺序拼接为路径）。
+    返回 {item_name: {path: 'A → B → C', ctx_cols: {col_name: value}}} 映射。
     """
     all_sheets = _get_all_sheets(file_path)
     df = all_sheets.get(sheet_name)
     if df is None or df.empty:
-        return {}
-
-    # 检测上下文列
-    l1_col = l2_col = l3_col = def_col = None
-    for col in df.columns:
-        col_s = str(col).strip()
-        if not l1_col and any(kw in col_s for kw in ['L1', '主题域分类']):
-            l1_col = col
-        elif not l2_col and any(kw in col_s for kw in ['L2', '主题域分组']):
-            l2_col = col
-        elif not l3_col and any(kw in col_s for kw in ['L3', '主题域']) and col != l1_col and col != l2_col:
-            l3_col = col
-        elif not def_col and any(kw in col_s for kw in ['定义', '说明', '描述']):
-            def_col = col
-
-    if not any([l1_col, l2_col, l3_col, def_col]):
         return {}
 
     # 找到目标列（模糊匹配）
@@ -227,6 +213,42 @@ def extract_item_context(file_path: str, sheet_name: str, column_name: str) -> d
     if target_col is None:
         return {}
 
+    # 确定上下文列：优先用用户指定的，否则自动检测
+    ctx_cols = []  # [(实际列名, 显示名)]
+    def_col = None
+
+    if context_columns:
+        # 用户手动指定的上下文列
+        for cc in context_columns:
+            for col in df.columns:
+                if str(col).strip() == cc:
+                    ctx_cols.append((col, cc))
+                    break
+    else:
+        # 自动检测 L1/L2/L3
+        l1_col = l2_col = l3_col = None
+        for col in df.columns:
+            col_s = str(col).strip()
+            if not l1_col and any(kw in col_s for kw in ['L1', '主题域分类']):
+                l1_col = col
+            elif not l2_col and any(kw in col_s for kw in ['L2', '主题域分组']):
+                l2_col = col
+            elif not l3_col and any(kw in col_s for kw in ['L3', '主题域']) and col != l1_col and col != l2_col:
+                l3_col = col
+        for c in [l1_col, l2_col, l3_col]:
+            if c:
+                ctx_cols.append((c, str(c).strip()))
+
+    # 自动检测定义列
+    for col in df.columns:
+        col_s = str(col).strip()
+        if any(kw in col_s for kw in ['定义', '说明', '描述']):
+            def_col = col
+            break
+
+    if not ctx_cols and not def_col:
+        return {}
+
     context_map = {}
     for _, row in df.iterrows():
         item_val = str(row.get(target_col, '')).strip()
@@ -234,18 +256,15 @@ def extract_item_context(file_path: str, sheet_name: str, column_name: str) -> d
             continue
         if item_val not in context_map:
             ctx = {}
-            if l1_col:
-                v = str(row.get(l1_col, '')).strip()
+            parts = []
+            for col, display_name in ctx_cols:
+                v = str(row.get(col, '')).strip()
                 if v and v != 'nan':
-                    ctx['l1'] = v
-            if l2_col:
-                v = str(row.get(l2_col, '')).strip()
-                if v and v != 'nan':
-                    ctx['l2'] = v
-            if l3_col:
-                v = str(row.get(l3_col, '')).strip()
-                if v and v != 'nan':
-                    ctx['l3'] = v
+                    parts.append(v)
+                    ctx[display_name] = v
+            path = ' → '.join(parts) if parts else ''
+            if path:
+                ctx['path'] = path
             if def_col:
                 v = str(row.get(def_col, '')).strip()
                 if v and v != 'nan' and v != '同上':

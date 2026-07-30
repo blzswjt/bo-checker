@@ -114,6 +114,17 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .single-in input:focus{border-color:#1a73e8}
 .single-res{margin-top:12px;padding:14px;background:#f9f9f9;border-radius:7px;font-size:13px;line-height:1.8;white-space:pre-wrap}
 /* AI Analysis Panel */
+/* ========== Context Columns ========== */
+.ctx-panel{margin-top:12px;border:1px solid #b8d4e3;border-radius:8px;overflow:hidden;background:#fff}
+.ctx-panel-hd{padding:8px 14px;background:linear-gradient(90deg,#e3f2fd,#f0f7ff);cursor:pointer;font-size:12px;font-weight:600;color:#1565c0;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.ctx-panel-hd:hover{filter:brightness(0.97)}
+.ctx-panel-bd{padding:10px 14px;border-top:1px solid #e0e0e0;font-size:12px}
+.ctx-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:14px;font-size:11px;cursor:pointer;border:1px solid #d9d9d9;background:#fff;margin:3px;transition:all .15s}
+.ctx-chip:hover{border-color:#1a73e8;background:#f0f7ff}
+.ctx-chip.on{background:#e3f2fd;border-color:#1a73e8;color:#1565c0;font-weight:600}
+.ctx-chip.disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+.ctx-chip .ctx-rm{font-size:10px;color:#c62828;cursor:pointer;margin-left:2px}
+.ctx-path-preview{margin-top:8px;padding:8px 12px;background:#f8f9fa;border-radius:6px;font-size:11px;color:#555;line-height:1.6}
 .ai-panel{margin-top:12px;border:1px solid #d0bfff;border-radius:8px;overflow:hidden;background:#fff}
 .ai-panel-hd{padding:10px 14px;background:linear-gradient(90deg,#f3e8ff,#e8f0fe);cursor:pointer;font-size:13px;font-weight:600;color:#5f2d91;display:flex;justify-content:space-between;align-items:center;user-select:none}
 .ai-panel-hd:hover{filter:brightness(0.97)}
@@ -645,8 +656,9 @@ function rSelect(t){
     sh.columns.forEach(c=>{
       const pair=t.pairs.find(p=>p.sheet===t.selSheet&&p.column===c.name);
       const checked=!!pair;
+      const isCtx=t._contextCols&&t._contextCols.includes(c.name);
       const rtype=c.recommended_type;
-      h+=`<div class="col-r${checked?' sel':''}" style="flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;min-width:0"><input type="checkbox" ${checked?'checked':''} onchange="toggleCol(${t.id},'${esc(c.name)}',this.checked)" style="width:16px;height:16px;flex-shrink:0"><div class="cn" style="min-width:100px">${esc(c.name)}</div><div class="cm">${c.rows}行·${c.unique_count}项</div>${rtype?`<span class="ai-b">${rtype}</span>`:''}<div class="cs" title="${c.sample.slice(0,5).map(esc).join(', ')}">${c.sample.slice(0,3).map(esc).join(', ')}</div></label><button class="btn btn-o btn-s" style="flex-shrink:0;font-size:10px" onclick="event.stopPropagation();previewCol(${t.id},'${esc(c.name)}')">👁 预览</button>`;
+      h+=`<div class="col-r${checked?' sel':''}${isCtx?' ctx-col':''}" style="flex-wrap:wrap;${isCtx?'background:#e3f2fd;border-color:#90caf9':''}"><label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;min-width:0"><input type="checkbox" ${checked?'checked':''} ${isCtx?'disabled':''} onchange="toggleCol(${t.id},'${esc(c.name)}',this.checked)" style="width:16px;height:16px;flex-shrink:0"><div class="cn" style="min-width:100px">${esc(c.name)}</div><div class="cm">${c.rows}行·${c.unique_count}项</div>${isCtx?'<span style="background:#1565c0;color:#fff;padding:1px 6px;border-radius:4px;font-size:9px">📎 上下文</span>':''}${rtype?`<span class="ai-b">${rtype}</span>`:''}<div class="cs" title="${c.sample.slice(0,5).map(esc).join(', ')}">${c.sample.slice(0,3).map(esc).join(', ')}</div></label><button class="btn btn-o btn-s" style="flex-shrink:0;font-size:10px" onclick="event.stopPropagation();previewCol(${t.id},'${esc(c.name)}')">👁 预览</button>`;
       if(checked){
         h+=`<select style="padding:3px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px;flex-shrink:0" onchange="pairType(${t.id},${t.pairs.indexOf(pair)},this.value)">`;
         ET.forEach(e=>{h+=`<option${e===pair.elementType?' selected':''}>${e}</option>`});
@@ -656,6 +668,39 @@ function rSelect(t){
     });
     h+=`</div>`;
   }
+  // 上下文列配置面板
+  if(!t._contextCols)t._contextCols=[];
+  const ctxOpen=t._ctxPanelOpen;
+  const selColNames=t.pairs.map(p=>p.column);
+  h+=`<div class="ctx-panel"><div class="ctx-panel-hd" onclick="tasks[${t.id}]._ctxPanelOpen=!tasks[${t.id}]._ctxPanelOpen;render(tasks[${t.id}])"><span>📎 上下文列 <span style="font-weight:400;font-size:11px;color:#888">（选择L1/L2/L3等前置列，提升识别准确率）</span>${t._contextCols.length?` <span style="background:#1a73e8;color:#fff;padding:1px 8px;border-radius:10px;font-size:10px;margin-left:4px">${t._contextCols.length}列已选</span>`:''}</span><span>${ctxOpen?'▼':'▶'}</span></div>`;
+  h+=`<div class="ctx-panel-bd${ctxOpen?'':' hidden'}">`;
+  if(ctxOpen&&sh){
+    if(t._contextCols.length){
+      h+=`<div style="margin-bottom:6px;color:#1565c0;font-weight:600">已选上下文列（按顺序拼接为路径）：</div><div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:8px">`;
+      t._contextCols.forEach((cc,i)=>{
+        h+=`<span class="ctx-chip on">${i+1}. ${esc(cc)} <span class="ctx-rm" onclick="event.stopPropagation();removeCtxCol(${t.id},'${esc(cc)}')">✗</span></span>`;
+      });
+      h+=`</div>`;
+      // 拖拽排序提示
+      h+=`<div style="font-size:10px;color:#999;margin-bottom:8px">💡 点击 ✗ 移除，先选的先出现在路径中。建议按 L1→L2→L3 顺序选择。</div>`;
+    } else {
+      h+=`<div style="color:#999;margin-bottom:8px">未选择上下文列（将自动检测L1/L2/L3列）</div>`;
+    }
+    // 可选列
+    const availCols=sh.columns.filter(c=>!selColNames.includes(c.name)&&!t._contextCols.includes(c.name));
+    if(availCols.length){
+      h+=`<div style="margin-bottom:4px;color:#666">点击添加上下文列：</div><div style="display:flex;flex-wrap:wrap;gap:2px">`;
+      availCols.forEach(c=>{
+        h+=`<span class="ctx-chip" onclick="addCtxCol(${t.id},'${esc(c.name)}')">${esc(c.name)}</span>`;
+      });
+      h+=`</div>`;
+    }
+    // 路径预览
+    if(t._contextCols.length&&t.pairs.length){
+      h+=`<div class="ctx-path-preview"><b>路径示例：</b>${t._contextCols.join(' → ')} → <span style="color:#1a73e8">识别列</span></div>`;
+    }
+  }
+  h+=`</div></div>`;
   // AI 分析面板
   const aiOpen=t._aiPanelOpen;
   h+=`<div class="ai-panel"><div class="ai-panel-hd" onclick="tasks[${t.id}]._aiPanelOpen=!tasks[${t.id}]._aiPanelOpen;render(tasks[${t.id}])"><span>🤖 AI 数据分析 <span style="font-weight:400;font-size:11px;color:#888">（先分析表结构，再精准识别）</span></span><span>${aiOpen?'▼':'▶'}</span></div>`;
@@ -839,7 +884,7 @@ function rRunning(t){
 function tSetType(id,t){tasks[id].et=t;render(tasks[id])}
 function setBS(id,val){const t=tasks[id];const n=parseInt(val);if(!isNaN(n)&&n>=1&&n<=50)t._batchSize=n;}
 function resetBS(id,rec){const t=tasks[id];t._batchSize=rec;render(t);}
-function tReset(id){const t=tasks[id];t.st='config';t.pairs=[];t.sheets=[];t.error=null;render(t);renderSidebar()}
+function tReset(id){const t=tasks[id];t.st='config';t.pairs=[];t.sheets=[];t._contextCols=[];t.error=null;render(t);renderSidebar()}
 function selSheet(id,name){tasks[id].selSheet=name;render(tasks[id])}
 
 async function doUpload(id,inp){
@@ -964,8 +1009,28 @@ function addPairSilent(t,col,type){
 }
 function toggleCol(id,col,checked){
   const t=tasks[id];
-  if(checked){const sh=t.sheets.find(s=>s.name===t.selSheet);const c=sh?.columns.find(x=>x.name===col);addPairSilent(t,col,c?.recommended_type||t.et)}
-  else{t.pairs=t.pairs.filter(p=>!(p.sheet===t.selSheet&&p.column===col))}
+  if(checked){
+    // 如果该列已是上下文列，先移除
+    if(t._contextCols&&t._contextCols.includes(col)){t._contextCols=t._contextCols.filter(c=>c!==col)}
+    const sh=t.sheets.find(s=>s.name===t.selSheet);const c=sh?.columns.find(x=>x.name===col);addPairSilent(t,col,c?.recommended_type||t.et);
+  }
+  else{
+    t.pairs=t.pairs.filter(p=>!(p.sheet===t.selSheet&&p.column===col));
+    // 如果该列是上下文列，不影响
+  }
+  render(t);
+}
+function addCtxCol(id,col){
+  const t=tasks[id];
+  if(!t._contextCols)t._contextCols=[];
+  if(!t._contextCols.includes(col))t._contextCols.push(col);
+  // 如果该列已是识别列，自动移除识别（上下文列不应同时作为识别列）
+  t.pairs=t.pairs.filter(p=>p.column!==col);
+  render(t);
+}
+function removeCtxCol(id,col){
+  const t=tasks[id];
+  if(t._contextCols)t._contextCols=t._contextCols.filter(c=>c!==col);
   render(t);
 }
 function toggleAllCols(id,checked){
@@ -973,7 +1038,11 @@ function toggleAllCols(id,checked){
   const sh=t.sheets.find(s=>s.name===t.selSheet);
   if(!sh)return;
   if(checked){
-    sh.columns.forEach(c=>{addPairSilent(t,c.name,c.recommended_type||t.et)});
+    sh.columns.forEach(c=>{
+      // 跳过上下文列
+      if(t._contextCols&&t._contextCols.includes(c.name))return;
+      addPairSilent(t,c.name,c.recommended_type||t.et);
+    });
   }else{
     t.pairs=t.pairs.filter(p=>p.sheet!==t.selSheet);
   }
@@ -1002,10 +1071,12 @@ async function startAll(id){
     try{
       const vr=await fetch(`/api/column-values?file_path=${encodeURIComponent(t.fp)}&sheet=${encodeURIComponent(p.sheet)}&column=${encodeURIComponent(p.column)}`);
       const vd=await vr.json();p.items=vd.values||[];
-      // 获取业务上下文（L1/L2/L3/定义），用于增强AI识别准确率
+      // 获取业务上下文（用户指定列或自动检测L1/L2/L3）
       p._contextMap=null;
       try{
-        const cr=await fetch(`/api/excel-context?file_path=${encodeURIComponent(t.fp)}&sheet=${encodeURIComponent(p.sheet)}&column=${encodeURIComponent(p.column)}`);
+        let ctxUrl=`/api/excel-context?file_path=${encodeURIComponent(t.fp)}&sheet=${encodeURIComponent(p.sheet)}&column=${encodeURIComponent(p.column)}`;
+        if(t._contextCols&&t._contextCols.length){ctxUrl+=`&context_columns=${encodeURIComponent(t._contextCols.join(','))}`}
+        const cr=await fetch(ctxUrl);
         const cd=await cr.json();
         if(cd.context&&Object.keys(cd.context).length>0)p._contextMap=cd.context;
       }catch(e){/* 上下文获取失败不影响主流程 */}

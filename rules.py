@@ -348,17 +348,20 @@ def build_batch_prompt(element_type: str, items_text: str, kb_examples: dict = N
     if context_map:
         context_lines = []
         for item_name, ctx in context_map.items():
-            parts = []
-            if ctx.get('l1'):
-                parts.append(ctx['l1'])
-            if ctx.get('l2'):
-                parts.append(ctx['l2'])
-            if ctx.get('l3'):
-                parts.append(ctx['l3'])
-            path = ' → '.join(parts) if parts else ''
+            # 优先用预拼接的 path，否则从 l1/l2/l3 拼接
+            path = ctx.get('path', '')
+            if not path:
+                parts = []
+                if ctx.get('l1'):
+                    parts.append(ctx['l1'])
+                if ctx.get('l2'):
+                    parts.append(ctx['l2'])
+                if ctx.get('l3'):
+                    parts.append(ctx['l3'])
+                path = ' → '.join(parts) if parts else ''
             line = f"- {item_name}"
             if path:
-                line += f"（所属流程：{path}）"
+                line += f"（所属路径：{path}）"
             if ctx.get('definition'):
                 line += f"\n  定义：{ctx['definition'][:100]}"
             context_lines.append(line)
