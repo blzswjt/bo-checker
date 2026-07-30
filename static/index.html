@@ -141,6 +141,13 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
 .rules-tabs{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:12px}
 .rules-tab{padding:4px 12px;border-radius:5px;cursor:pointer;font-size:11px;background:#f5f5f5;color:#666;border:none}
 .rules-tab.on{background:#1a73e8;color:#fff}
+.rv-tab{padding:4px 14px;border-radius:14px;cursor:pointer;font-size:11px;background:#fff;color:#666;border:1px solid #d9d9d9;display:inline-flex;align-items:center;gap:4px;transition:all .15s}
+.rv-tab:hover{border-color:#1a73e8;color:#1a73e8}
+.rv-tab.active{background:#1a73e8;color:#fff;border-color:#1a73e8}
+.rv-tab .rv-actions{display:inline-flex;gap:2px;margin-left:4px}
+.rv-tab .rv-actions span{font-size:9px;cursor:pointer;opacity:.7}
+.rv-tab .rv-actions span:hover{opacity:1}
+.rv-tab.active .rv-actions span{color:#fff}
 .rules-ct{font-size:12px;line-height:1.8;white-space:pre-wrap;color:#555;max-height:550px;overflow-y:auto;padding:14px;background:#fafafa;border-radius:7px}
 /* KB */
 .add-form{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
@@ -347,6 +354,12 @@ table.rt{width:100%;border-collapse:collapse;font-size:11px}
             <button class="btn btn-o btn-s" onclick="resetRulesConfig()">↩️ 重置默认</button>
           </div>
         </div>
+        <!-- 版本管理栏 -->
+        <div id="ruleVersionBar" style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:8px 12px;background:#f8f9fa;border-radius:8px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:600;color:#555">📌 版本：</span>
+          <div id="ruleVersionTabs" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+          <button class="btn btn-o btn-s" onclick="createRuleVersion()" style="font-size:10px">➕ 新建版本</button>
+        </div>
         <div class="rules-tabs" id="rTabs"></div>
         <div class="rules-ct" id="rCt">加载中...</div>
       </div>
@@ -457,6 +470,8 @@ let viewMode='list';  // 视图模式: 'list' | 'matrix'
 let _cellData={};     // 矩阵单元格详情数据
 let rulesConfig={};   // 规则配置（可编辑）
 let _ruleEditMode=false; // 规则编辑模式
+let _ruleVersions=[];  // 规则版本列表
+let _activeRuleVersion='默认'; // 当前激活版本
 
 function getModelId(){return document.getElementById('modelSel')?.value||null}
 
@@ -502,8 +517,10 @@ function loadTasks(){
 // Init: 加载元素类型、规则、模型列表
 // ============================================================
 async function init(){
-  const[tr,rr,mr,rc]=await Promise.all([fetch('/api/element-types').then(r=>r.json()),fetch('/api/rules').then(r=>r.json()),fetch('/api/models').then(r=>r.json()),fetch('/api/rules-config').then(r=>r.json())]);
+  const[tr,rr,mr,rc,rv]=await Promise.all([fetch('/api/element-types').then(r=>r.json()),fetch('/api/rules').then(r=>r.json()),fetch('/api/models').then(r=>r.json()),fetch('/api/rules-config').then(r=>r.json()),fetch('/api/rule-versions').then(r=>r.json())]);
   ET=tr.types||[];RN=tr.rule_names||{};sType=ET[0]||'';allRules=rr.rules||{};rulesConfig=rc||{};
+  _ruleVersions=rv.versions||[];const _av=rv.versions?.find(v=>v.active);if(_av)_activeRuleVersion=_av.name;
+  renderVersionTabs();
   const ms=document.getElementById('modelSel');ms.innerHTML='';
   (mr.models||[]).forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;if(m.id===mr.default)o.selected=true;ms.appendChild(o)});
   const sr=document.getElementById('sTypeRow');
@@ -733,6 +750,12 @@ function rSelect(t){
     h+=`<div style="margin-top:10px;padding:10px;background:#f0f7ff;border-radius:6px;font-size:12px">已选 <b>${t.pairs.length}</b> 列：`;
     t.pairs.forEach(p=>{h+=`<span class="tag" style="margin:2px">${esc(p.column)} → ${esc(p.elementType)}</span> `});
     h+=`<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="color:#666">📦 每批识别条数：</span><input type="number" min="1" max="50" value="${curBS}" style="width:56px;padding:3px 6px;border:1px solid #d9d9d9;border-radius:5px;font-size:12px;text-align:center" onchange="setBS(${t.id},this.value)" oninput="setBS(${t.id},this.value)"><span style="color:#999;font-size:11px">条/批（推荐 ${recBS}，范围 1~50）<button class="btn btn-o" style="padding:1px 8px;font-size:10px;margin-left:4px" onclick="resetBS(${t.id},${recBS})">恢复推荐</button></span></div>`;
+    // 规则版本选择
+    if(_ruleVersions.length>1){
+      h+=`<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="color:#666">📌 规则版本：</span><select style="padding:3px 8px;border:1px solid #d9d9d9;border-radius:5px;font-size:11px" onchange="switchRuleVersionForTask(${t.id},this.value)">`;
+      _ruleVersions.forEach(v=>{h+=`<option value="${esc(v.name)}"${v.name===_activeRuleVersion?' selected':''}>${esc(v.name)}${v.active?' (当前)':''}</option>`});
+      h+=`</select><span style="color:#999;font-size:10px">当前使用「${esc(_activeRuleVersion)}」版本规则</span></div>`;
+    }
     h+=`</div><div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-p" onclick="startAll(${t.id})">🚀 开始识别</button><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
   }else{
     h+=`<div style="margin-top:10px;color:#999;font-size:12px">请勾选至少一列进行识别</div><div style="margin-top:8px"><button class="btn btn-o" onclick="tReset(${t.id})">↩ 重新上传</button></div>`;
@@ -2186,6 +2209,107 @@ async function resetRulesConfig(){
       alert('✅ 已重置为默认规则');
     }
   }catch(e){alert('❗ 重置失败: '+e.message)}
+}
+
+// ============================================================
+// 规则版本管理
+// ============================================================
+function renderVersionTabs(){
+  const ct=document.getElementById('ruleVersionTabs');
+  if(!ct)return;
+  ct.innerHTML='';
+  _ruleVersions.forEach(v=>{
+    const span=document.createElement('span');
+    span.className='rv-tab'+(v.active?' active':'');
+    let inner=v.name;
+    if(v.active)inner+=' ✔';
+    // 操作按钮
+    inner+='<span class="rv-actions">';
+    inner+=`<span title="重命名" onclick="event.stopPropagation();renameRuleVersion('${esc(v.name)}')">✏️</span>`;
+    if(v.name!=='默认')inner+=`<span title="删除" onclick="event.stopPropagation();deleteRuleVersion('${esc(v.name)}')">❗</span>`;
+    inner+='</span>';
+    span.innerHTML=inner;
+    span.onclick=()=>switchRuleVersion(v.name);
+    ct.appendChild(span);
+  });
+}
+
+async function switchRuleVersion(name){
+  if(name===_activeRuleVersion)return;
+  try{
+    const resp=await fetch(`/api/rule-versions/${encodeURIComponent(name)}/switch`,{method:'POST'});
+    const data=await resp.json();
+    if(data.ok){
+      _activeRuleVersion=name;
+      rulesConfig=data.config||{};
+      _ruleVersions.forEach(v=>v.active=v.name===name);
+      renderVersionTabs();
+      // 刷新规则视图
+      const rr=await fetch('/api/rules').then(r=>r.json());
+      allRules=rr.rules||{};
+      const tr=await fetch('/api/element-types').then(r=>r.json());
+      RN=tr.rule_names||{};
+      if(_ruleEditMode)renderRulesEditor();
+      else{const rt=document.getElementById('rTabs');rt.innerHTML='';let first=true;
+        for(const[t,txt]of Object.entries(allRules)){const b=document.createElement('button');b.className='rules-tab'+(first?' on':'');b.textContent=t;b.onclick=()=>{rt.querySelectorAll('.rules-tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('rCt').textContent=txt};rt.appendChild(b);if(first){document.getElementById('rCt').textContent=txt;first=false}}
+      }
+    }
+  }catch(e){alert('❗ 切换失败: '+e.message)}
+}
+
+async function createRuleVersion(){
+  const name=prompt('请输入新版本名称：');
+  if(!name||!name.trim())return;
+  const copyFrom=confirm('是否从当前版本复制规则？\n确定=复制 取消=从默认规则创建')?_activeRuleVersion:null;
+  try{
+    const resp=await fetch('/api/rule-versions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim(),copy_from:copyFrom})});
+    const data=await resp.json();
+    if(data.ok){
+      _ruleVersions=data.versions||[];
+      renderVersionTabs();
+      alert('✅ 版本「'+name.trim()+'」已创建');
+    }else{alert('❗ '+data.error)}
+  }catch(e){alert('❗ 创建失败: '+e.message)}
+}
+
+async function deleteRuleVersion(name){
+  if(name==='默认'){alert('无法删除默认版本');return}
+  if(!confirm('确定要删除版本「'+name+'」吗？'))return;
+  try{
+    const resp=await fetch(`/api/rule-versions/${encodeURIComponent(name)}`,{method:'DELETE'});
+    const data=await resp.json();
+    if(data.ok){
+      _ruleVersions=data.versions||[];
+      if(data.versions){const av=data.versions.find(v=>v.active);if(av)_activeRuleVersion=av.name}
+      renderVersionTabs();
+      // 重新加载当前版本规则
+      const rc=await fetch('/api/rules-config').then(r=>r.json());
+      rulesConfig=rc||{};
+      const rr=await fetch('/api/rules').then(r=>r.json());
+      allRules=rr.rules||{};
+      if(_ruleEditMode)renderRulesEditor();
+    }else{alert('❗ '+data.error)}
+  }catch(e){alert('❗ 删除失败: '+e.message)}
+}
+
+async function renameRuleVersion(oldName){
+  const newName=prompt('重命名版本「'+oldName+'」：',oldName);
+  if(!newName||newName.trim()===oldName)return;
+  try{
+    const resp=await fetch(`/api/rule-versions/${encodeURIComponent(oldName)}/rename`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_name:newName.trim()})});
+    const data=await resp.json();
+    if(data.ok){
+      _ruleVersions=data.versions||[];
+      if(_activeRuleVersion===oldName)_activeRuleVersion=newName.trim();
+      renderVersionTabs();
+    }else{alert('❗ '+data.error)}
+  }catch(e){alert('❗ 重命名失败: '+e.message)}
+}
+
+async function switchRuleVersionForTask(taskId,name){
+  if(name===_activeRuleVersion)return;
+  await switchRuleVersion(name);
+  const t=tasks[taskId];if(t&&t.st==='select')render(t);
 }
 
 init();

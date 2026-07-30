@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from llm import chat_stream, get_available_models, get_default_model_id, analyze_image, get_vision_models, get_default_vision_model_id
-from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text, get_rule_detail, get_rules_config, update_rules_config, reset_rules_config
+from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text, get_rule_detail, get_rules_config, update_rules_config, reset_rules_config, list_rule_versions, create_rule_version, delete_rule_version, rename_rule_version, switch_rule_version, get_version_rules
 from checker import parse_excel_file, extract_column_values, extract_item_context, check_items_stream, check_single_item
 import kb
 
@@ -123,22 +123,82 @@ async def get_rules():
 
 @app.get("/api/rules-config")
 async def get_rules_config_api():
-    """返回完整规则配置（含 enabled 状态，用于编辑器）"""
+    """返回当前版本的完整规则配置"""
     return get_rules_config()
 
 
 @app.put("/api/rules-config")
 async def save_rules_config_api(config: dict):
-    """保存规则配置"""
+    """保存规则配置到当前版本"""
     update_rules_config(config)
     return {"ok": True}
 
 
 @app.post("/api/rules-config/reset")
 async def reset_rules_config_api():
-    """重置规则配置为默认值"""
+    """重置当前版本规则配置为默认值"""
     reset_rules_config()
     return {"ok": True, "config": get_rules_config()}
+
+
+# ---- 规则版本管理 ----
+
+@app.get("/api/rule-versions")
+async def list_rule_versions_api():
+    """返回所有规则版本列表"""
+    return {"versions": list_rule_versions()}
+
+
+class VersionCreateRequest(BaseModel):
+    name: str
+    copy_from: str = None
+
+@app.post("/api/rule-versions")
+async def create_rule_version_api(req: VersionCreateRequest):
+    """创建新版本"""
+    ok = create_rule_version(req.name, req.copy_from)
+    if not ok:
+        return JSONResponse({"error": "版本名已存在或为空"}, status_code=400)
+    return {"ok": True, "versions": list_rule_versions()}
+
+
+@app.delete("/api/rule-versions/{name}")
+async def delete_rule_version_api(name: str):
+    """删除指定版本"""
+    ok = delete_rule_version(name)
+    if not ok:
+        return JSONResponse({"error": "无法删除默认版本或版本不存在"}, status_code=400)
+    return {"ok": True, "versions": list_rule_versions()}
+
+
+class VersionRenameRequest(BaseModel):
+    new_name: str
+
+@app.put("/api/rule-versions/{name}/rename")
+async def rename_rule_version_api(name: str, req: VersionRenameRequest):
+    """重命名版本"""
+    ok = rename_rule_version(name, req.new_name)
+    if not ok:
+        return JSONResponse({"error": "重命名失败"}, status_code=400)
+    return {"ok": True, "versions": list_rule_versions()}
+
+
+@app.post("/api/rule-versions/{name}/switch")
+async def switch_rule_version_api(name: str):
+    """切换到指定版本"""
+    ok = switch_rule_version(name)
+    if not ok:
+        return JSONResponse({"error": "版本不存在"}, status_code=400)
+    return {"ok": True, "config": get_rules_config()}
+
+
+@app.get("/api/rule-versions/{name}/rules")
+async def get_version_rules_api(name: str):
+    """获取指定版本的规则配置"""
+    rules = get_version_rules(name)
+    if not rules:
+        return JSONResponse({"error": "版本不存在"}, status_code=404)
+    return rules
 
 
 # ============================================================

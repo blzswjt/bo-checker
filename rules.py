@@ -155,31 +155,16 @@ _DEFAULT_RULES = copy.deepcopy(ELEMENT_RULES)
 # 规则配置文件路径
 _RULES_CONFIG_PATH = Path(__file__).parent / "rules_config.json"
 
-
-def load_rules_config():
-    """从 rules_config.json 加载自定义规则配置，覆盖默认规则"""
-    global ELEMENT_RULES
-    if _RULES_CONFIG_PATH.exists():
-        try:
-            with open(_RULES_CONFIG_PATH, "r", encoding="utf-8") as f:
-                custom = json.load(f)
-            for etype, rules in custom.items():
-                if etype in ELEMENT_RULES:
-                    for key in ["identification", "naming", "definition"]:
-                        if key in rules:
-                            ELEMENT_RULES[etype][key] = rules[key]
-                    if "description" in rules:
-                        ELEMENT_RULES[etype]["description"] = rules["description"]
-                    if "not_examples" in rules:
-                        ELEMENT_RULES[etype]["not_examples"] = rules["not_examples"]
-                    if "disabled" in rules:
-                        ELEMENT_RULES[etype]["disabled"] = rules["disabled"]
-        except Exception:
-            pass
+# ============================================================
+# 规则版本管理
+# ============================================================
+# 内存中的版本存储: {version_name: {rules: {...}, created: "..."}}
+_rule_versions: dict = {}
+_active_version: str = "默认"
 
 
-def save_rules_config():
-    """将当前 ELEMENT_RULES 保存到 rules_config.json"""
+def _serialize_rules() -> dict:
+    """序列化当前 ELEMENT_RULES 为可存储的 dict"""
     data = {}
     for etype, rules in ELEMENT_RULES.items():
         data[etype] = {
@@ -190,35 +175,85 @@ def save_rules_config():
             "not_examples": rules.get("not_examples", []),
             "disabled": rules.get("disabled", False),
         }
+    return data
+
+
+def _apply_rules(rules_data: dict):
+    """将 rules_data 应用到 ELEMENT_RULES"""
+    global ELEMENT_RULES
+    ELEMENT_RULES = copy.deepcopy(_DEFAULT_RULES)
+    for etype, rules in rules_data.items():
+        if etype in ELEMENT_RULES:
+            for key in ["identification", "naming", "definition"]:
+                if key in rules:
+                    ELEMENT_RULES[etype][key] = rules[key]
+            if "description" in rules:
+                ELEMENT_RULES[etype]["description"] = rules["description"]
+            if "not_examples" in rules:
+                ELEMENT_RULES[etype]["not_examples"] = rules["not_examples"]
+            if "disabled" in rules:
+                ELEMENT_RULES[etype]["disabled"] = rules["disabled"]
+
+
+def _save_versions_to_file():
+    """将版本数据持久化到 rules_config.json"""
+    data = {
+        "versions": _rule_versions,
+        "active_version": _active_version,
+    }
     with open(_RULES_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+def load_rules_config():
+    """从 rules_config.json 加载版本数据，激活当前版本"""
+    global _rule_versions, _active_version
+    if not _RULES_CONFIG_PATH.exists():
+        # 初始化默认版本
+        _rule_versions["默认"] = {"rules": _serialize_rules(), "created": ""}
+        return
+    try:
+        with open(_RULES_CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # 新版本格式
+        if "versions" in data:
+            _rule_versions = data["versions"]
+            _active_version = data.get("active_version", "默认")
+            if _active_version in _rule_versions:
+                _apply_rules(_rule_versions[_active_version]["rules"])
+        else:
+            # 旧版本格式（向后兼容）：直接是 rules 数据
+            _rule_versions["默认"] = {"rules": data, "created": ""}
+            _apply_rules(data)
+    except Exception:
+        _rule_versions["默认"] = {"rules": _serialize_rules(), "created": ""}
+
+
+def save_rules_config():
+    """将当前 ELEMENT_RULES 保存到当前激活版本"""
+    if _active_version in _rule_versions:
+        _rule_versions[_active_version]["rules"] = _serialize_rules()
+    else:
+        _rule_versions[_active_version] = {"rules": _serialize_rules(), "created": ""}
+    _save_versions_to_file()
+
+
 def reset_rules_config():
-    """重置规则为默认值"""
+    """重置当前版本规则为默认值"""
     global ELEMENT_RULES
     ELEMENT_RULES = copy.deepcopy(_DEFAULT_RULES)
-    if _RULES_CONFIG_PATH.exists():
-        _RULES_CONFIG_PATH.unlink()
+    if _active_version in _rule_versions:
+        _rule_versions[_active_version]["rules"] = _serialize_rules()
+        _save_versions_to_file()
 
 
 def get_rules_config() -> dict:
-    """返回当前完整规则配置"""
-    result = {}
-    for etype, rules in ELEMENT_RULES.items():
-        result[etype] = {
-            "description": rules.get("description", ""),
-            "identification": rules.get("identification", []),
-            "naming": rules.get("naming", []),
-            "definition": rules.get("definition", []),
-            "not_examples": rules.get("not_examples", []),
-            "disabled": rules.get("disabled", False),
-        }
-    return result
+    """返回当前激活版本的完整规则配置"""
+    return _serialize_rules()
 
 
 def update_rules_config(new_config: dict):
-    """用前端传来的配置更新规则"""
+    """用前端传来的配置更新当前版本规则"""
     global ELEMENT_RULES
     for etype, rules in new_config.items():
         if etype in ELEMENT_RULES:
@@ -226,6 +261,74 @@ def update_rules_config(new_config: dict):
                 if key in rules:
                     ELEMENT_RULES[etype][key] = rules[key]
     save_rules_config()
+
+
+# ---- 版本管理 API ----
+
+def list_rule_versions() -> list:
+    """返回所有版本名称列表"""
+    return [{"name": name, "active": name == _active_version,
+             "created": v.get("created", "")}
+            for name, v in _rule_versions.items()]
+
+
+def create_rule_version(name: str, copy_from: str = None) -> bool:
+    """创建新版本，可从已有版本复制"""
+    global _active_version
+    if not name or name in _rule_versions:
+        return False
+    if copy_from and copy_from in _rule_versions:
+        rules = copy.deepcopy(_rule_versions[copy_from]["rules"])
+    else:
+        rules = _serialize_rules()
+    from datetime import datetime
+    _rule_versions[name] = {"rules": rules, "created": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    _save_versions_to_file()
+    return True
+
+
+def delete_rule_version(name: str) -> bool:
+    """删除版本（不允许删除默认）"""
+    global _active_version
+    if name == "默认" or name not in _rule_versions:
+        return False
+    del _rule_versions[name]
+    if _active_version == name:
+        _active_version = "默认"
+        if "默认" in _rule_versions:
+            _apply_rules(_rule_versions["默认"]["rules"])
+    _save_versions_to_file()
+    return True
+
+
+def rename_rule_version(old_name: str, new_name: str) -> bool:
+    """重命名版本"""
+    global _active_version
+    if old_name not in _rule_versions or new_name in _rule_versions or not new_name:
+        return False
+    _rule_versions[new_name] = _rule_versions.pop(old_name)
+    if _active_version == old_name:
+        _active_version = new_name
+    _save_versions_to_file()
+    return True
+
+
+def switch_rule_version(name: str) -> bool:
+    """切换到指定版本，更新 ELEMENT_RULES"""
+    global _active_version
+    if name not in _rule_versions:
+        return False
+    _active_version = name
+    _apply_rules(_rule_versions[name]["rules"])
+    _save_versions_to_file()
+    return True
+
+
+def get_version_rules(name: str) -> dict:
+    """获取指定版本的规则配置"""
+    if name in _rule_versions:
+        return _rule_versions[name]["rules"]
+    return {}
 
 
 # 启动时加载自定义配置
