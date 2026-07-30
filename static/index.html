@@ -1110,7 +1110,18 @@ async function startAll(id){
               }
             }
             else if(ev.type==='rule_check'){
+              // 实时更新矩阵单元格DOM
               updateSingleMatrixCell(t,pi,ev);
+              // 同时存储到p.results，确保切换视图不丢失规则检查数据
+              const _ri=p.results.findIndex(r=>r.item===ev.item_name);
+              if(_ri>=0){
+                if(!Array.isArray(p.results[_ri].rules_check))p.results[_ri].rules_check=[];
+                // 避免重复（同一规则只存一次）
+                const _existIdx=p.results[_ri].rules_check.findIndex(rc=>rc.rule===ev.rule);
+                const _rcObj={rule:ev.rule,pass:ev.pass,reason:ev.reason||''};
+                if(_existIdx>=0)p.results[_ri].rules_check[_existIdx]=_rcObj;
+                else p.results[_ri].rules_check.push(_rcObj);
+              }
             }
             else if(ev.type==='progress'){
               const el=document.getElementById(`pf-${t.id}-${pi}`);
@@ -1245,15 +1256,32 @@ function updateResultRow(t,pi,ev){
   if(ri<0)return;
   // 关键：如果ev.is_bo为null但已有有效值，保留已有结论（JSON解析失败时不应覆盖流式解析结果）
   if(ev.is_bo===null&&p.results[ri].is_bo!==null){
-    // 只更新rules_check
-    if(ev.rules_check&&ev.rules_check.length)p.results[ri].rules_check=ev.rules_check;
+    // 只合并rules_check（不覆盖已有的流式rule_check数据）
+    if(ev.rules_check&&ev.rules_check.length){
+      const existing=p.results[ri].rules_check||[];
+      ev.rules_check.forEach(rc=>{
+        const idx=existing.findIndex(e=>e.rule===rc.rule);
+        if(idx>=0)existing[idx]=rc; else existing.push(rc);
+      });
+      p.results[ri].rules_check=existing;
+    }
     return;
   }
   // 更新存储的数据
   p.results[ri].is_bo=ev.is_bo;
   p.results[ri].confidence=ev.confidence;
   p.results[ri].reason=ev.reason;
-  p.results[ri].rules_check=ev.rules_check||[];
+  // 合并rules_check：保留已有的流式rule_check数据，补充JSON解析的新数据
+  if(ev.rules_check&&ev.rules_check.length){
+    const existing=p.results[ri].rules_check||[];
+    ev.rules_check.forEach(rc=>{
+      const idx=existing.findIndex(e=>e.rule===rc.rule);
+      if(idx>=0)existing[idx]=rc; else existing.push(rc);
+    });
+    p.results[ri].rules_check=existing;
+  } else if(!p.results[ri].rules_check){
+    p.results[ri].rules_check=[];
+  }
   // 更新列表视图DOM
   const tb=document.getElementById(`tb-${t.id}-${pi}`);
   if(tb){
@@ -1360,9 +1388,27 @@ async function rerunFailed(id){
           try{
             const ev=JSON.parse(line.slice(6));
             if(ev.type==='result'){p.results.push(ev)}
+            else if(ev.type==='rule_check'){
+              const _ri2=p.results.findIndex(r=>r.item===ev.item_name);
+              if(_ri2>=0){
+                if(!Array.isArray(p.results[_ri2].rules_check))p.results[_ri2].rules_check=[];
+                const _rcObj={rule:ev.rule,pass:ev.pass,reason:ev.reason||''};
+                const _eidx=p.results[_ri2].rules_check.findIndex(rc=>rc.rule===ev.rule);
+                if(_eidx>=0)p.results[_ri2].rules_check[_eidx]=_rcObj;else p.results[_ri2].rules_check.push(_rcObj);
+              }
+            }
             else if(ev.type==='result_update'){
               const ri=p.results.findIndex(r=>r.item===ev.item);
-              if(ri>=0){p.results[ri].is_bo=ev.is_bo;p.results[ri].confidence=ev.confidence;p.results[ri].reason=ev.reason;p.results[ri].rules_check=ev.rules_check||[]}
+              if(ri>=0){
+                if(!(ev.is_bo===null&&p.results[ri].is_bo!==null)){
+                  p.results[ri].is_bo=ev.is_bo;p.results[ri].confidence=ev.confidence;p.results[ri].reason=ev.reason;
+                }
+                if(ev.rules_check&&ev.rules_check.length){
+                  const existing=p.results[ri].rules_check||[];
+                  ev.rules_check.forEach(rc=>{const idx=existing.findIndex(e=>e.rule===rc.rule);if(idx>=0)existing[idx]=rc;else existing.push(rc)});
+                  p.results[ri].rules_check=existing;
+                }
+              }
             }
             else if(ev.type==='done'){p.summary=ev.summary;p.status='done';p.thinkingDone=true}
           }catch(e){}
