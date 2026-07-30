@@ -472,7 +472,7 @@ async def qa_chat(req: QAChatRequest):
     )
 
     messages = [{"role": "system", "content": system_prompt}]
-    for h in req.history[-6:]:  # 最多保留最近6条历史
+    for h in req.history[-10:]:  # 最多保留最近10条历史
         messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
     messages.append({"role": "user", "content": req.question})
 
