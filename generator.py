@@ -347,10 +347,11 @@ def extract_business_objects(doc_context: str, model_id: str = None) -> Generato
 - definition: 定义说明（包含目的、定义、范围，200字以上）
 - data_class: 数据分类（"主数据"或"事务数据"）
 - entities: 该业务对象下的逻辑实体名称列表（初步识别）
+- source: 来源章节（从文档哪个章节/段落提取的，如"7.1 整体业务框架"、8.1 L4业务对象设计"）
 
 先输出你的分析思考过程，最后输出JSON：
 ```json
-[{"l1":"...", "l2":"...", "l3":"...", "code":"YWDX-000001", "da_code":"DA_03010101", "name_cn":"...", "name_en":"...", "definition":"...", "data_class":"事务数据", "entities":["实体1","实体2"]}]
+[{"l1":"...", "l2":"...", "l3":"...", "code":"YWDX-000001", "da_code":"DA_03010101", "name_cn":"...", "name_en":"...", "definition":"...", "data_class":"事务数据", "entities":["实体1","实体2"], "source":"章节名"}]
 ```"""
 
     user_prompt = f"""## 需求文档内容
@@ -407,6 +408,7 @@ def extract_logical_entities(doc_context: str, business_objects: list, model_id:
 - name_cn: 中文名称（名词，以下层加前缀规则命名）
 - name_en: 英文名称
 - definition: 定义（包含目的、定义、范围）
+- source: 来源章节（从文档哪个章节提取的，如"8.2 L5-L6逻辑实体设计"、10.1.2 注册合同"）
 
 注意：
 1. 每个业务对象有且只有一个主逻辑实体（通常以"XX基本信息"或"XX头"命名）
@@ -416,7 +418,7 @@ def extract_logical_entities(doc_context: str, business_objects: list, model_id:
 
 先输出分析思考，最后输出JSON：
 ```json
-[{"bo_name":"...", "bo_code":"...", "entity_code":"...", "name_cn":"...", "name_en":"...", "definition":"..."}]
+[{"bo_name":"...", "bo_code":"...", "entity_code":"...", "name_cn":"...", "name_en":"...", "definition":"...", "source":"章节名"}]
 ```"""
 
     user_prompt = f"""## 已识别的业务对象
@@ -489,6 +491,7 @@ def extract_business_attributes(doc_context: str, entities: list, model_id: str 
 - length: 长度（如256、18,2等，数值型可留空）
 - required: 是否必填（Y/N）
 - logic: 字段逻辑说明（数据来源、计算规则、取值范围等）
+- source: 来源章节（从文档哪个章节/表格提取的，如"10.1.2 注册合同-交易要素"）
 
 注意：
 1. 剔除技术字段（ID主键、创建人、修改人、删除标记、租户ID等）
@@ -498,7 +501,7 @@ def extract_business_attributes(doc_context: str, entities: list, model_id: str 
 
 先简要分析，最后输出JSON：
 ```json
-[{{"entity":"...", "attr_cn":"...", "attr_en":"...", "type":"VARCHAR", "length":"256", "required":"Y", "logic":"..."}}]
+[{{"entity":"...", "attr_cn":"...", "attr_en":"...", "type":"VARCHAR", "length":"256", "required":"Y", "logic":"...", "source":"章节名"}}]
 ```"""
 
         user_prompt = f"""## 业务对象：{bo_name}
@@ -559,7 +562,7 @@ def generate_excel(business_objects: list, entities: list, attributes: list, out
     headers1 = ["L1-主题域分类", "L2-主题域分组", "L3-主题域",
                 "*业务对象编码", "*业务对象编码", "*业务对象中文名称",
                 "*业务对象英文名称", "定义说明", "数据分类识别（主数据、事务数据）",
-                "*逻辑实体中文名称"]
+                "*逻辑实体中文名称", "来源章节"]
 
     for col, h in enumerate(headers1, 1):
         cell = ws1.cell(row=1, column=col, value=h)
@@ -585,12 +588,12 @@ def generate_excel(business_objects: list, entities: list, attributes: list, out
         # 写入每行的逻辑实体名称（第10列）
         for i, ent_name in enumerate(entity_names):
             ws1.cell(row=row_idx, column=10, value=ent_name)
-            for col in range(1, 11):
+            for col in range(1, 12):
                 ws1.cell(row=row_idx, column=col).border = thin_border
                 ws1.cell(row=row_idx, column=col).alignment = Alignment(vertical='center', wrap_text=True)
             row_idx += 1
 
-        # 写入业务对象信息并合并单元格（前9列）
+        # 写入业务对象信息并合并单元格（前9列 + 第11列来源章节）
         bo_values = [
             bo.get("l1", ""), bo.get("l2", ""), bo.get("l3", ""),
             bo.get("code", ""), bo.get("da_code", ""), bo.get("name_cn", ""),
@@ -608,8 +611,18 @@ def generate_excel(business_objects: list, entities: list, attributes: list, out
                 vertical='center', horizontal='center' if col <= 5 else 'left', wrap_text=True
             )
 
+        # 来源章节（第11列），同样合并
+        source_val = bo.get("source", "")
+        ws1.cell(row=start_row, column=11, value=source_val)
+        if num_rows > 1:
+            ws1.merge_cells(
+                start_row=start_row, start_column=11,
+                end_row=start_row + num_rows - 1, end_column=11
+            )
+        ws1.cell(row=start_row, column=11).alignment = Alignment(vertical='center', wrap_text=True)
+
     # 设置列宽
-    col_widths1 = [14, 16, 16, 14, 14, 16, 16, 50, 20, 20]
+    col_widths1 = [14, 16, 16, 14, 14, 16, 16, 50, 20, 20, 24]
     for i, w in enumerate(col_widths1, 1):
         ws1.column_dimensions[get_column_letter(i)].width = w
     ws1.freeze_panes = "A2"
@@ -617,7 +630,7 @@ def generate_excel(business_objects: list, entities: list, attributes: list, out
     # ---- Sheet2: 逻辑数据实体清单 ----
     ws2 = wb.create_sheet("逻辑数据实体清单")
     headers2 = ["*业务对象名称", "*业务对象编码", "*逻辑实体编码",
-                "*逻辑实体中文名称", "*逻辑实体英文名称", "*逻辑实体定义"]
+                "*逻辑实体中文名称", "*逻辑实体英文名称", "*逻辑实体定义", "来源章节"]
 
     for col, h in enumerate(headers2, 1):
         cell = ws2.cell(row=1, column=col, value=h)
@@ -633,18 +646,19 @@ def generate_excel(business_objects: list, entities: list, attributes: list, out
         ws2.cell(row=row_i, column=4, value=ent.get("name_cn", ""))
         ws2.cell(row=row_i, column=5, value=ent.get("name_en", ""))
         ws2.cell(row=row_i, column=6, value=ent.get("definition", ""))
-        for col in range(1, 7):
+        ws2.cell(row=row_i, column=7, value=ent.get("source", ""))
+        for col in range(1, 8):
             ws2.cell(row=row_i, column=col).border = thin_border
             ws2.cell(row=row_i, column=col).alignment = Alignment(vertical='top', wrap_text=True)
 
-    col_widths2 = [16, 14, 16, 20, 24, 60]
+    col_widths2 = [16, 14, 16, 20, 24, 60, 24]
     for i, w in enumerate(col_widths2, 1):
         ws2.column_dimensions[get_column_letter(i)].width = w
     ws2.freeze_panes = "A2"
 
     # ---- Sheet3: 逻辑数据实体属性清单 ----
     ws3 = wb.create_sheet("逻辑数据实体属性清单")
-    headers3 = ["逻辑实体", "属性中文名称", "属性英文名称", "类型", "长度", "是否必填", "逻辑"]
+    headers3 = ["逻辑实体", "属性中文名称", "属性英文名称", "类型", "长度", "是否必填", "逻辑", "来源章节"]
 
     for col, h in enumerate(headers3, 1):
         cell = ws3.cell(row=1, column=col, value=h)
@@ -662,7 +676,7 @@ def generate_excel(business_objects: list, entities: list, attributes: list, out
         if ent_name != current_entity:
             current_entity = ent_name
             # 添加分组标题行（合并单元格效果）
-            for col in range(1, 8):
+            for col in range(1, 9):
                 cell = ws3.cell(row=row_i, column=col, value=ent_name if col == 1 else "")
                 cell.font = Font(bold=True, size=11)
                 cell.fill = PatternFill(start_color="D9E2F3", end_color="D9E2F3", fill_type="solid")
@@ -676,12 +690,13 @@ def generate_excel(business_objects: list, entities: list, attributes: list, out
         ws3.cell(row=row_i, column=5, value=str(attr.get("length", "")))
         ws3.cell(row=row_i, column=6, value=attr.get("required", ""))
         ws3.cell(row=row_i, column=7, value=attr.get("logic", ""))
-        for col in range(1, 8):
+        ws3.cell(row=row_i, column=8, value=attr.get("source", ""))
+        for col in range(1, 9):
             ws3.cell(row=row_i, column=col).border = thin_border
             ws3.cell(row=row_i, column=col).alignment = Alignment(vertical='top', wrap_text=True)
         row_i += 1
 
-    col_widths3 = [18, 18, 22, 14, 10, 10, 50]
+    col_widths3 = [18, 18, 22, 14, 10, 10, 50, 24]
     for i, w in enumerate(col_widths3, 1):
         ws3.column_dimensions[get_column_letter(i)].width = w
     ws3.freeze_panes = "A2"
