@@ -9,6 +9,7 @@ uvicorn>=0.20.0,<1.0
 # LLM SDK
 openai>=1.0.0,<2.0
 volcenginesdkarkruntime>=0.0.1
+httpx>=0.24.0
 
 # 环境变量
 python-dotenv>=1.0.0

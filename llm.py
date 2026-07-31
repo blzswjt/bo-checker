@@ -190,25 +190,34 @@ def _get_client(model_id: str):
     """获取或创建对应模型的客户端"""
     if model_id not in _clients:
         cfg = _get_model_config(model_id)
+        import httpx
+        connect_timeout = int(os.getenv("LLM_CONNECT_TIMEOUT", "30"))
+        http_client = httpx.Client(
+            timeout=httpx.Timeout(connect=connect_timeout, read=300, write=30, pool=30),
+            follow_redirects=True,
+        )
         if cfg["provider"] == "ark":
             try:
                 from volcenginesdkarkruntime import Ark
                 _clients[model_id] = Ark(
                     api_key=cfg["api_key"],
                     base_url=cfg["base_url"],
+                    http_client=http_client,
                 )
-            except (ImportError, AttributeError):
+            except (ImportError, AttributeError, TypeError):
                 # 回退到 openai SDK（同样兼容 Ark API）
                 from openai import OpenAI
                 _clients[model_id] = OpenAI(
                     api_key=cfg["api_key"],
                     base_url=cfg["base_url"],
+                    http_client=http_client,
                 )
         else:
             from openai import OpenAI
             _clients[model_id] = OpenAI(
                 api_key=cfg["api_key"],
                 base_url=cfg["base_url"],
+                http_client=http_client,
             )
     return _clients[model_id]
 
@@ -239,11 +248,14 @@ def chat(messages: list[dict], temperature: float = 0.3, model_id: str = None, t
         raise
 
 
-def chat_stream(messages: list[dict], temperature: float = 0.3, model_id: str = None, max_retries: int = 1):
-    """流式调用 LLM，逐步 yield 文本片段。支持自动重试一次"""
+def chat_stream(messages: list[dict], temperature: float = 0.3, model_id: str = None, max_retries: int = 2):
+    """流式调用 LLM，逐步 yield 文本片段。支持自动重试（含网络错误）"""
+    import time
     mid = model_id or _default_model_id
     cfg = _get_model_config(mid)
     last_error = None
+    # 从环境变量读取超时（秒），默认300秒（大文档生成需要较长时间）
+    req_timeout = int(os.getenv("LLM_TIMEOUT", "300"))
 
     for attempt in range(max_retries + 1):
         client = _get_client(mid)
@@ -253,6 +265,7 @@ def chat_stream(messages: list[dict], temperature: float = 0.3, model_id: str = 
                 messages=messages,
                 temperature=temperature,
                 stream=True,
+                timeout=req_timeout,
             )
             for chunk in stream:
                 delta = chunk.choices[0].delta
@@ -264,5 +277,18 @@ def chat_stream(messages: list[dict], temperature: float = 0.3, model_id: str = 
             # 清除缓存客户端，下次重新创建
             _clients.pop(mid, None)
             if attempt < max_retries:
+                time.sleep(2 * (attempt + 1))  # 递增等待: 2s, 4s
                 continue  # 重试
-            raise RuntimeError(f"LLM流式调用失败 ({cfg['name']}): {last_error}")
+            # 生成更友好的错误信息
+            err_str = str(last_error).lower()
+            if 'network' in err_str or 'connect' in err_str or 'resolve' in err_str:
+                hint = (f"网络连接失败，无法访问 {cfg.get('base_url', 'API')}。"
+                        f"可能原因：服务器所在地区无法直连国内API、DNS解析失败、或API Key未配置。"
+                        f"原始错误: {last_error}")
+            elif 'timeout' in err_str:
+                hint = f"请求超时（{req_timeout}秒），文档可能过大或模型响应慢。原始错误: {last_error}"
+            elif 'auth' in err_str or '401' in err_str or 'key' in err_str:
+                hint = f"API Key 认证失败，请检查环境变量配置。原始错误: {last_error}"
+            else:
+                hint = f"LLM调用失败 ({cfg['name']}): {last_error}"
+            raise RuntimeError(hint)
