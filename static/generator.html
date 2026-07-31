@@ -315,6 +315,9 @@ async function startGenerate() {
 
 function handleSSE(evt) {
   switch(evt.type) {
+    case 'heartbeat':
+      // 心跳保活，忽略
+      break;
     case 'phase':
       setPhaseActive(evt.phase);
       setStatus(evt.message);

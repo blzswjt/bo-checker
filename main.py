@@ -610,21 +610,54 @@ async def gen_parse_docx(file: UploadFile = File(...)):
 
 @app.post("/api/gen/generate")
 async def gen_generate(req: GenRequest):
-    """SSE流式执行完整生成流程"""
+    """SSE流式执行完整生成流程（带心跳保活，防止代理超时）"""
+    import queue
+    import threading
+
     full_path = UPLOAD_DIR / req.file_path
     if not full_path.exists():
         return JSONResponse({"error": "文件不存在，请先上传文档"}, status_code=404)
 
     def event_stream():
-        for event in run_generation_pipeline(
-            str(full_path),
-            model_id=req.model_id,
-            vision_model_id=req.vision_model_id,
-            analyze_img=req.analyze_images
-        ):
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        q = queue.Queue()
+        _SENTINEL = object()
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+        def _run_pipeline():
+            try:
+                for event in run_generation_pipeline(
+                    str(full_path),
+                    model_id=req.model_id,
+                    vision_model_id=req.vision_model_id,
+                    analyze_img=req.analyze_images
+                ):
+                    q.put(event)
+            except Exception as e:
+                q.put({"type": "error", "message": f"生成失败: {str(e)}"})
+            finally:
+                q.put(_SENTINEL)
+
+        t = threading.Thread(target=_run_pipeline, daemon=True)
+        t.start()
+
+        while True:
+            try:
+                event = q.get(timeout=15)  # 每15秒超时一次
+                if event is _SENTINEL:
+                    break
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            except queue.Empty:
+                # 发送心跳保活，防止代理超时断开连接
+                yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # 禁止Nginx缓冲
+            "Connection": "keep-alive",
+        }
+    )
 
 
 @app.get("/api/gen/download/{filename}")
