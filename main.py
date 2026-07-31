@@ -17,6 +17,7 @@ from typing import Optional
 from llm import chat_stream, get_available_models, get_default_model_id, analyze_image, get_vision_models, get_default_vision_model_id
 from rules import ELEMENT_TYPES, ELEMENT_RULES, get_all_rules_text, get_rule_detail, get_rules_config, update_rules_config, reset_rules_config, list_rule_versions, create_rule_version, delete_rule_version, rename_rule_version, switch_rule_version, get_version_rules
 from checker import parse_excel_file, extract_column_values, extract_item_context, check_items_stream, check_single_item
+from generator import parse_docx, extract_docx_images, analyze_images, run_generation_pipeline
 import kb
 
 app = FastAPI(title="数据建模识别智能体", version="1.0.0", description="多元素并发识别 · 流式思考 · 手动纠正 · 知识库学习")
@@ -81,6 +82,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/", response_class=HTMLResponse)
 async def index():
     html_path = static_dir / "index.html"
+    if html_path.exists():
+        return HTMLResponse(html_path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>页面未找到</h1>")
+
+
+@app.get("/generator", response_class=HTMLResponse)
+async def generator_page():
+    html_path = static_dir / "generator.html"
     if html_path.exists():
         return HTMLResponse(html_path.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>页面未找到</h1>")
@@ -561,6 +570,101 @@ async def qa_save(req: QASaveRequest):
     reason = f"答疑：{req.question} → {req.answer[:200]}"
     kb.add_example(req.element_type, req.item, req.pass_status, reason)
     return {"ok": True}
+
+
+# ============================================================
+# 数据建模生成智能体
+# ============================================================
+
+class GenRequest(BaseModel):
+    file_path: str
+    model_id: Optional[str] = None
+    vision_model_id: Optional[str] = None
+    analyze_images: bool = True
+
+
+@app.post("/api/gen/parse-docx")
+async def gen_parse_docx(file: UploadFile = File(...)):
+    """上传并解析docx文档，返回文档结构概览"""
+    if not file.filename.endswith(".docx"):
+        return JSONResponse({"error": "请上传 .docx 格式文件"}, status_code=400)
+
+    file_id = str(uuid.uuid4())[:8]
+    save_name = f"{file_id}_{file.filename}"
+    save_path = UPLOAD_DIR / save_name
+    with open(save_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    result = parse_docx(str(save_path))
+    if "error" in result:
+        return JSONResponse(result, status_code=400)
+
+    # 不返回full_text给前端（太大），只返回结构信息
+    result.pop("full_text", None)
+    result["file_id"] = file_id
+    result["file_name"] = file.filename
+    result["file_path"] = save_name
+    return result
+
+
+@app.post("/api/gen/generate")
+async def gen_generate(req: GenRequest):
+    """SSE流式执行完整生成流程"""
+    full_path = UPLOAD_DIR / req.file_path
+    if not full_path.exists():
+        return JSONResponse({"error": "文件不存在，请先上传文档"}, status_code=404)
+
+    def event_stream():
+        for event in run_generation_pipeline(
+            str(full_path),
+            model_id=req.model_id,
+            vision_model_id=req.vision_model_id,
+            analyze_img=req.analyze_images
+        ):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.get("/api/gen/download/{filename}")
+async def gen_download(filename: str):
+    """下载生成的Excel文件"""
+    from fastapi.responses import FileResponse
+    file_path = UPLOAD_DIR / filename
+    if not file_path.exists():
+        return JSONResponse({"error": "文件不存在"}, status_code=404)
+    # 提取友好的文件名
+    download_name = filename.replace("gen_", "").split("_", 1)[-1] if "_" in filename else filename
+    return FileResponse(
+        path=str(file_path),
+        filename=download_name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
+@app.post("/api/gen/analyze-image")
+async def gen_analyze_image(file: UploadFile = File(...), vision_model: str = None):
+    """单独分析一张图片（调试用）"""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        return JSONResponse({"error": "请上传图片文件"}, status_code=400)
+
+    import base64 as b64
+    content = await file.read()
+    image_b64 = b64.b64encode(content).decode("utf-8")
+
+    prompt = """请分析这张图片，提取其中的数据建模相关信息：
+- 业务对象名称和关系
+- 逻辑实体和属性
+- 层级结构（L1-L4）
+- 实体间关系
+请以结构化文本输出。"""
+
+    try:
+        result = analyze_image(image_b64, prompt, model_id=vision_model)
+        return {"analysis": result}
+    except RuntimeError as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # ============================================================

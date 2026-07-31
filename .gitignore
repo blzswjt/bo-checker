@@ -30,6 +30,9 @@ rules_config.json
 test_data.xlsx
 *.xlsx
 *.xls
+*.pdf
+*.docx
+~$*
 
 # IDE
 .vscode/
