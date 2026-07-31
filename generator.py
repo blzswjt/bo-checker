@@ -99,11 +99,20 @@ def parse_docx(file_path: str) -> dict:
 
     full_text = "\n".join(full_text_parts)
 
+    # 用zip方式准确统计图片数量（段落XML搜索可能遗漏）
+    actual_image_count = image_count
+    try:
+        with zipfile.ZipFile(file_path, 'r') as z:
+            media_files = [f for f in z.namelist() if f.startswith('word/media/')]
+            actual_image_count = max(image_count, len(media_files))
+    except Exception:
+        pass
+
     return {
         "sections": sections,
         "tables": tables_data[:30],  # 限制返回表格数量
         "table_count": len(tables_data),
-        "image_count": image_count,
+        "image_count": actual_image_count,
         "full_text": full_text,
         "text_length": len(full_text),
         "structure": _build_structure_tree(sections),
@@ -209,18 +218,22 @@ def analyze_images(images: list[dict], model_id: str = None) -> str:
 3. 如果是流程图：提取关键业务节点、流转关系、涉及的业务对象
 4. 如果是状态图：提取状态名称和流转条件
 5. 如果是原型图/界面截图：提取页面中涉及的数据字段和业务对象
+6. 如果是表格截图：提取表格中的所有文字内容
 
 请以结构化文本形式输出提取到的信息，重点标注：
 - 业务对象名称
 - 逻辑实体名称
 - 实体间关系
 - 层级归属关系
+- 图片中的文字内容
 
 只输出提取到的结构化信息，不要输出无关内容。"""
 
     results = []
-    # 最多分析前8张图片（避免过多API调用）
-    for img in images[:8]:
+    # 过滤掉太小的图片（小于5KB通常是图标/装饰）
+    meaningful_images = [img for img in images if img["size"] > 5 * 1024]
+    # 分析所有有意义的图片（最多20张）
+    for img in meaningful_images[:20]:
         if img["size"] > 10 * 1024 * 1024:  # 跳过超过10MB的
             continue
         try:
@@ -563,27 +576,37 @@ def generate_excel(business_objects: list, entities: list, attributes: list, out
 
         if not entity_names:
             entity_names = bo.get("entities", [""])
+        if not entity_names:
+            entity_names = [""]
 
-        # 第一行：完整信息 + 第一个逻辑实体
-        first = True
-        for ent_name in (entity_names if entity_names else [""]):
-            ws1.cell(row=row_idx, column=1, value=bo.get("l1", "") if first else "")
-            ws1.cell(row=row_idx, column=2, value=bo.get("l2", "") if first else "")
-            ws1.cell(row=row_idx, column=3, value=bo.get("l3", "") if first else "")
-            ws1.cell(row=row_idx, column=4, value=bo.get("code", "") if first else "")
-            ws1.cell(row=row_idx, column=5, value=bo.get("da_code", "") if first else "")
-            ws1.cell(row=row_idx, column=6, value=bo.get("name_cn", "") if first else "")
-            ws1.cell(row=row_idx, column=7, value=bo.get("name_en", "") if first else "")
-            ws1.cell(row=row_idx, column=8, value=bo.get("definition", "") if first else "")
-            ws1.cell(row=row_idx, column=9, value=bo.get("data_class", "") if first else "")
+        start_row = row_idx
+        num_rows = len(entity_names)
+
+        # 写入每行的逻辑实体名称（第10列）
+        for i, ent_name in enumerate(entity_names):
             ws1.cell(row=row_idx, column=10, value=ent_name)
-
             for col in range(1, 11):
                 ws1.cell(row=row_idx, column=col).border = thin_border
-                ws1.cell(row=row_idx, column=col).alignment = Alignment(vertical='top', wrap_text=True)
-
-            first = False
+                ws1.cell(row=row_idx, column=col).alignment = Alignment(vertical='center', wrap_text=True)
             row_idx += 1
+
+        # 写入业务对象信息并合并单元格（前9列）
+        bo_values = [
+            bo.get("l1", ""), bo.get("l2", ""), bo.get("l3", ""),
+            bo.get("code", ""), bo.get("da_code", ""), bo.get("name_cn", ""),
+            bo.get("name_en", ""), bo.get("definition", ""), bo.get("data_class", "")
+        ]
+        for col, val in enumerate(bo_values, 1):
+            ws1.cell(row=start_row, column=col, value=val)
+            # 多行时合并单元格
+            if num_rows > 1:
+                ws1.merge_cells(
+                    start_row=start_row, start_column=col,
+                    end_row=start_row + num_rows - 1, end_column=col
+                )
+            ws1.cell(row=start_row, column=col).alignment = Alignment(
+                vertical='center', horizontal='center' if col <= 5 else 'left', wrap_text=True
+            )
 
     # 设置列宽
     col_widths1 = [14, 16, 16, 14, 14, 16, 16, 50, 20, 20]
